@@ -42,7 +42,7 @@ Server side of the AI Reading Companion: Next.js route handlers on Vercel, Neon 
 
 ## Hooking up ElevenLabs
 
-**Done** for https://reading-companion-navy.vercel.app: workspace webhook `Reading Companion transcripts` is the post-call webhook (transcripts), and the `save_note` tool is attached to the Reading Companion template agent (its secret header comes from the ElevenLabs secret `reading_companion_tool_secret`). New document agents copy the template, so they get the tool too. If the deploy URL changes, update both URLs in ElevenLabs.
+**Done** for https://reefai-app.vercel.app: workspace webhook `Reading Companion transcripts` is the post-call webhook (transcripts), and the `save_note` tool is attached to the Reading Companion template agent (its secret header comes from the ElevenLabs secret `reading_companion_tool_secret`). New document agents copy the template, so they get the tool too. If the deploy URL changes, update both URLs in ElevenLabs.
 
 Manual steps, for reference or a new workspace:
 **Post-call webhook**
