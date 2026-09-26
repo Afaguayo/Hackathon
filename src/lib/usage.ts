@@ -17,6 +17,7 @@ export function usageLimits(): Record<UsageKind, { perUser: number; global: numb
     tts_chars: { perUser: limit("LIMIT_TTS_CHARS_PER_USER", 5_000), global: limit("LIMIT_TTS_CHARS_GLOBAL", 20_000) },
     upload: { perUser: limit("LIMIT_UPLOADS_PER_USER", 10), global: limit("LIMIT_UPLOADS_GLOBAL", 100) },
     agent_session: { perUser: limit("LIMIT_SESSIONS_PER_USER", 30), global: limit("LIMIT_SESSIONS_GLOBAL", 300) },
+    ai_request: { perUser: limit("LIMIT_AI_PER_USER", 100), global: limit("LIMIT_AI_GLOBAL", 1000) },
   };
 }
 
@@ -24,6 +25,7 @@ const LABELS: Record<UsageKind, string> = {
   tts_chars: "read-aloud characters",
   upload: "uploads",
   agent_session: "voice sessions",
+  ai_request: "Reed answers",
 };
 
 export class UsageLimitError extends Error {

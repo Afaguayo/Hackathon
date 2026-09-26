@@ -8,20 +8,23 @@ Server side of the AI Reading Companion: Next.js route handlers on Vercel, Neon 
 | `src/db/schema.ts` | Tables: `documents`, `reading_progress`, `conversations`, `messages`, `notes` |
 | `src/db/index.ts` | `getDb()`: Drizzle over Neon's HTTP driver |
 | `drizzle/` | SQL migrations (generated; commit them) |
-| `src/lib/elevenlabs.ts` | TTS, signed URLs, knowledge-base upload, per-document agents |
+| `src/lib/elevenlabs.ts` | TTS, signed URLs, knowledge-base text upload, per-document agents |
+| `src/lib/book-text.ts` | Extracts chapters + paragraphs from PDF (`unpdf`, layout-aware), EPUB (`jszip`), TXT/MD/HTML |
+| `src/lib/reed-ai.ts` | `askReed()`: one text-only websocket turn with the `ELEVENLABS_TEXT_AGENT_ID` agent |
 | `src/lib/auth.ts` | `getUserId()`: Clerk user id, or 401 |
 | `src/lib/usage.ts` | Rolling-24h usage limits (per user + global) on paid ElevenLabs calls |
 | `src/proxy.ts` | Next 16 proxy running `clerkMiddleware()` |
 | `src/lib/documents.ts`, `src/lib/http.ts` | Shared lookup (by user, by agent id) and error helpers |
 | `src/lib/webhook-signature.ts` | Verifies `ElevenLabs-Signature` (HMAC-SHA256, 30 min replay window) |
-| `src/app/api/documents/**` | Documents, progress, notes, conversations, per-document signed URL |
+| `src/app/api/documents/**` | Documents, text content, progress, notes, conversations, per-document signed URL |
+| `src/app/api/ai/*` | `explain`, `summarize`, `quiz` for the frontend (Reed text agent) |
 | `src/app/api/webhooks/elevenlabs` | Post-call webhook: saves transcript + summary |
 | `src/app/api/agent-tools/save-note` | Server tool the agent calls to save a note |
 | `src/app/api/tts`, `src/app/api/companion/signed-url` | Read aloud; general companion session |
 | `src/app/api/usage` | Current user's usage vs. limits |
 
 ## How "ask about the whole book" works
-1. `POST /api/documents` uploads the file to the **ElevenLabs Knowledge Base** (ElevenLabs extracts the text, including PDFs).
+1. `POST /api/documents` extracts the book's chapters and paragraphs itself (`book-text.ts`; ElevenLabs' own PDF extraction drops content), stores them in `documents.content` for the reader, and adds the same text to the **ElevenLabs Knowledge Base**.
 2. It creates a **private agent for that document**: a copy of the Reading Companion template (`ELEVENLABS_AGENT_ID`) with only that document in its knowledge base and RAG on. A conversation can't switch knowledge bases, so one agent per document keeps users' books separate.
 3. `GET /api/documents/:id/signed-url` starts a voice session with that agent. The UI still passes `{{passage}}`/`{{book_title}}` for the part being read right now.
 4. Deleting a document deletes its agent and knowledge-base file too.
@@ -38,7 +41,10 @@ Server side of the AI Reading Companion: Next.js route handlers on Vercel, Neon 
 - [x] `save_note` server tool endpoint
 - [x] Deleting a document cascades to its progress, notes, conversations and messages
 - [x] Clerk auth on every user route; users only see their own data
-- [x] Usage limits (`usage_events` table): TTS characters, uploads, voice sessions
+- [x] Usage limits (`usage_events` table): TTS characters, uploads, voice sessions, AI answers
+- [x] Text extraction (PDF/EPUB/TXT/MD/HTML) + `GET /api/documents/:id/content`
+- [x] Reed AI for the frontend: `/api/ai/explain`, `/api/ai/summarize`, `/api/ai/quiz` (ElevenLabs text-only agent)
+- [x] Frontend (Gael's Vite app) served at `/` from the same deployment
 
 ## Hooking up ElevenLabs
 
@@ -71,4 +77,4 @@ Fine to skip for the hackathon demo; do all of these before real users rely on t
 - [ ] Make sure no old Syncthing share still points at the project folder on any teammate's machine.
 
 ## Environment
-`ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_AGENT_ID`, `ELEVENLABS_WEBHOOK_SECRET`, `ELEVENLABS_TOOL_SECRET`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, optional `LIMIT_*`. See `.env.example`. Locally the database URL lives in `.env` and the ElevenLabs values in `.env.local`; both are git-ignored.
+`ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_AGENT_ID`, `ELEVENLABS_TEXT_AGENT_ID`, `ELEVENLABS_WEBHOOK_SECRET`, `ELEVENLABS_TOOL_SECRET`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, optional `LIMIT_*`; build-time `VITE_CLERK_PUBLISHABLE_KEY` for the frontend. See `.env.example`. Locally the database URL lives in `.env` and the ElevenLabs values in `.env.local`; both are git-ignored.

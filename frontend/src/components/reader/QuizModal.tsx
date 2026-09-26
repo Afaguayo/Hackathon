@@ -83,6 +83,10 @@ export const QuizModal: React.FC<QuizModalProps> = ({
             <span className="w-5 h-5 border-2 border-reed border-t-transparent rounded-full animate-spin" />
             <span>Generando preguntas con calma...</span>
           </div>
+        ) : questions.length === 0 ? (
+          <div className="py-12 text-center text-ink-muted text-sm font-sans">
+            Reed no pudo crear el quiz en este momento. Cierra y vuelve a intentarlo en unos segundos.
+          </div>
         ) : isFinished ? (
           <div className="py-8 text-center">
             <h4 className="font-serif font-semibold text-2xl text-ink mb-2">

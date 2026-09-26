@@ -3,12 +3,24 @@
 Lo que el lector ve y usa. Aplicación basada en el **Sistema de Diseño Reed (V1 · Septiembre 2026 - Innovathon 2.0)** con el sistema de acompañamiento interactivo de Reed. Ver el [README del proyecto](../README.md).
 
 ## Estado
-**Todavía no hay interfaz.** `src/app/page.tsx` es solo una página de relleno. Primero decidimos en equipo cómo va a ser la app; ElevenLabs ya está conectado en el servidor y listo para usarse.
+**Conectado al backend.** Esta app es la página principal del sitio (https://reefai-app.vercel.app): Vercel la compila y la sirve desde el mismo proyecto que la API, así que todo va por el mismo dominio.
 
-## Lo que la interfaz puede usar
-- `POST /api/tts` con `{ "text": "..." }` → devuelve audio MP3 (leer en voz alta). Máximo 2500 caracteres.
-- `GET /api/companion/signed-url` → devuelve `{ "signedUrl": "wss://..." }` para hablar con el agente de ElevenLabs.
-  - En React: envolver la página en `<ConversationProvider>` de `@elevenlabs/react` (ya instalado) y llamar `useConversation().startSession({ signedUrl, dynamicVariables: { passage, book_title } })`.
+- **Sin sesión** (o sin `VITE_CLERK_PUBLISHABLE_KEY`): modo demo con los libros de `data/sampleBooks.ts` y respuestas de ejemplo.
+- **Con sesión de Clerk**: tu biblioteca real, subida de libros, voz de ElevenLabs y Reed con IA real. Todo pasa por `src/services/api.ts`, que añade el token de Clerk a cada llamada.
+
+## Lo que usa del backend (`src/services/api.ts`)
+| Función | Endpoint | Para qué |
+|---|---|---|
+| `listLibrary()` | `GET /api/documents` | Tus libros con su progreso |
+| `uploadBook(file, título, autor)` | `POST /api/documents` | Sube EPUB/PDF/TXT/MD (máx. 4 MB); el backend extrae capítulos y párrafos |
+| `loadBookContent(book)` | `GET /api/documents/:id/content` | Capítulos y párrafos al abrir un libro |
+| `saveProgress(id, posición, %)` | `PUT /api/documents/:id/progress` | Guarda dónde quedaste (automático en el lector) |
+| `synthesizeSpeech(texto)` | `POST /api/tts` | Voz de ElevenLabs por párrafo; si se acaba el límite diario, el lector usa la voz del navegador |
+| `explainParagraph(párrafo, pregunta)` | `POST /api/ai/explain` | Reed explica un párrafo |
+| `summarizeChapter(título, texto)` | `POST /api/ai/summarize` | Resumen del capítulo |
+| `generateQuiz(título, texto)` | `POST /api/ai/quiz` | 3–5 preguntas de opción múltiple |
+
+Las respuestas de Reed salen de un agente de ElevenLabs en modo texto. Límites diarios por usuario: 5 000 caracteres de voz, 10 libros, 100 respuestas de Reed.
 ## Identidad: Reed
 > *«El amigo curioso que ya leyó el libro y te lo cuenta con calma.»*
 - **Principios**: *Se dobla, no exige*, *El libro manda*, *Preguntar es lo principal*, *Calma, como la música*.
@@ -40,35 +52,27 @@ El lector decide el nivel de intervención de Reed tocando la burbuja circular i
 - **Reproductor ListenBar & ReedBubble**: Barra de audio con selector de modos flotante.
 - **Lucide React**: Iconografía en retícula de 24px con trazo 1.75px.
 
-## Cómo ejecutar el proyecto
-1. Instalar dependencias (ya configuradas):
+## Cómo ejecutar el proyecto (dos terminales)
+1. **Backend** (en la raíz del repo; necesita el `.env.local` de la raíz, pídeselo a Angel):
    ```bash
    npm install
+   npm run dev          # API de Next en http://localhost:3000
    ```
-2. Iniciar servidor de desarrollo:
+2. **Frontend** (en `frontend/`):
    ```bash
-   npm run dev
+   npm install
+   npm run dev          # esta app en http://localhost:5173; /api se reenvía al backend
    ```
-   Abrirá la app en `http://localhost:3000`.
+   Si solo corres el frontend, funciona en modo demo (sin biblioteca real ni IA).
 
-3. Compilar para producción:
-   ```bash
-   npm run build
-   ```
+3. **Compilar todo como en Vercel** (en la raíz): `npm run build` compila esta app en `public/app/` y luego Next.
 
-## Siguientes tareas
-1. Decidir en equipo cómo se ve y qué hace la app.
-2. Construir la interfaz en `src/app/` (y `src/components/` si hace falta).
 ## Se comunica con
-- [backend](../backend/README.md): Conectado mediante `src/services/api.ts` hacia la API de Emmanuel.
+- [backend](../backend/README.md): mediante `src/services/api.ts`.
 
-## Para correrlo
-`npm install`, copiar `.env.example` a `.env.local` con las claves, `npm run dev` → http://localhost:3000.
-## Claves necesarias (en `.env.local`, nunca se suben a GitHub)
+## Claves necesarias (en `frontend/.env.local`, nunca se suben a GitHub)
 ```env
-# Clave pública de Clerk (dashboard.clerk.com)
+# Clave pública de Clerk: la misma que NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY del backend
 VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
-
-# URL de la API del backend
-VITE_BACKEND_URL=http://localhost:8000
 ```
+`VITE_BACKEND_URL` ya no hace falta: la app llama a `/api` en el mismo dominio.

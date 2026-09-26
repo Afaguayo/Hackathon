@@ -2,26 +2,28 @@
 
 An app that reads **with** you: it reads text aloud and talks with you about what you are reading.
 
-**Status:** backend API only (ElevenLabs + database + Clerk auth + usage limits). There is no UI yet; the page at `/` is a placeholder with sign-in buttons until we decide what the app looks like.
+**Status:** live at https://reefai-app.vercel.app. Gael's **Reed** app (Vite + React, in `frontend/`) is the site; it talks to the Next.js API (`src/app/api/`) on the same domain. Signed-in users get their own library, uploads, ElevenLabs voice and Reed's AI answers; signed-out visitors see a demo with sample books.
 
 ## Tech stack
 
 | Tech | What it does for us |
 |---|---|
-| **Next.js** (App Router, TypeScript, Tailwind) | The web app: server API routes now, UI later |
+| **Vite + React 18 + Tailwind** (`frontend/`) | The Reed app users see; built into `public/app/` and served at `/` |
+| **Next.js** (App Router, TypeScript) | The API (`src/app/api/`) |
 | **Vercel** | Deployment (every push to `main` deploys; PRs get preview URLs) |
 | **ElevenLabs Text to Speech** | Read text aloud with a natural voice |
-| **ElevenLabs Agents + Knowledge Base** | Live voice conversation; each uploaded document gets its own agent that can search the whole document |
+| **ElevenLabs Agents + Knowledge Base** | Live voice conversation; each uploaded document gets its own agent that can search the whole document. A text-only agent answers explain / summarize / quiz |
 | **Neon Postgres + Drizzle ORM** | Documents, reading progress, conversations, notes |
 | **Clerk** | Sign-in; every API route (except ElevenLabs callbacks) requires a signed-in user |
 | n8n, Zavu | Not wired yet; add when needed |
 
-## API (what the future UI calls)
+## API (what the frontend calls via `frontend/src/services/api.ts`)
 
 | Endpoint | Does | Returns |
 |---|---|---|
-| `POST /api/documents` multipart `file`, `title?`, `author?` | Upload a PDF/TXT/MD/EPUB/DOCX/HTML (max 4 MB) to the ElevenLabs knowledge base and create its agent | `201 { document }` |
-| `GET /api/documents` | The user's documents, newest first | `{ documents }` |
+| `POST /api/documents` multipart `file`, `title?`, `author?` | Upload an EPUB/PDF/TXT/MD/HTML (max 4 MB): extract chapters + paragraphs, add the text to the ElevenLabs knowledge base, create its agent | `201 { document }` |
+| `GET /api/documents` | The user's documents (without text), newest first, each with `progress` | `{ documents }` |
+| `GET /api/documents/:id/content` | The book's text: `{ chapters: [{ number, title, paragraphs }] }` | `{ content }` |
 | `GET /api/documents/:id` | One document | `{ document }` |
 | `DELETE /api/documents/:id` | Delete it plus its ElevenLabs agent and knowledge-base file | `204` |
 | `GET /api/documents/:id/signed-url` | Voice session with **that document's** agent | `{ signedUrl }` |
@@ -33,22 +35,25 @@ An app that reads **with** you: it reads text aloud and talks with you about wha
 | `POST /api/agent-tools/save-note` | *Called by the agent* mid-conversation (secret header) | `{ result }` |
 | `POST /api/tts` body `{ "text": "..." }` | ElevenLabs text to speech (max 2500 chars) | `audio/mpeg` |
 | `GET /api/companion/signed-url` | Session with the general companion agent (no document) | `{ signedUrl }` |
+| `POST /api/ai/explain` body `{ paragraph, question }` | Reed explains a passage | `{ explanation }` |
+| `POST /api/ai/summarize` body `{ title, text }` | Chapter summary | `{ summary }` |
+| `POST /api/ai/quiz` body `{ title, text }` | 3–5 multiple-choice questions | `{ questions }` |
 | `GET /api/usage` | The user's usage in the last 24h vs. limits | `{ usage }` |
 
-**Auth:** calls from our own pages send the Clerk session cookie automatically; other clients send `Authorization: Bearer <Clerk session token>`.
+**Auth:** send `Authorization: Bearer <Clerk session token>` (the frontend does this in `services/api.ts`).
 
-**Usage limits** (rolling 24h, per user / whole app): read aloud 5,000 / 20,000 characters, uploads 10 / 100, voice sessions 30 / 300. Change them with the `LIMIT_*` env vars in `.env.example`.
+**Usage limits** (rolling 24h, per user / whole app): read aloud 5,000 / 20,000 characters, uploads 10 / 100, voice sessions 30 / 300, Reed AI answers 100 / 1,000. Change them with the `LIMIT_*` env vars in `.env.example`.
 
-Errors come back as `{ "error": "..." }` (400 bad input, 401 signed out, 404 not found, 409 document not ready, 413 too large, 415 wrong file type, 429 usage limit, 502 ElevenLabs failed). The ElevenLabs key stays on the server (`src/lib/elevenlabs.ts`); the browser never sees it.
+Errors come back as `{ "error": "..." }` (400 bad input, 401 signed out, 404 not found, 409 document not ready, 413 too large, 415 wrong file type, 422 unreadable file, 429 usage limit, 502 ElevenLabs failed). The ElevenLabs key stays on the server (`src/lib/elevenlabs.ts`); the browser never sees it.
 
-To use the agent from a UI later: install nothing extra (`@elevenlabs/react` is already a dependency), wrap the page in `<ConversationProvider>`, and call `useConversation().startSession({ signedUrl, dynamicVariables: { passage, book_title } })`.
+Live voice conversation isn't in the frontend yet. To add it: `@elevenlabs/react` (wrap in `<ConversationProvider>`, then `useConversation().startSession({ signedUrl, dynamicVariables: { passage, book_title } })` with the URL from `/api/documents/:id/signed-url`).
 
 ## Where the code lives and who owns it
 
 | Area | Files | Owner |
 |---|---|---|
 | Backend / API | `src/app/api/`, `src/lib/`, `src/db/`, `drizzle/` | Emmanuel ([notes](backend/README.md)) |
-| Frontend / UI (not started) | `src/app/page.tsx`, `src/app/layout.tsx` | Gael ([notas](frontend/README.md)) |
+| Frontend / UI | `frontend/` (Vite app) | Gael ([notas](frontend/README.md)) |
 | AI / ElevenLabs agent | Agent prompt + voice in the ElevenLabs dashboard, `src/lib/elevenlabs.ts` together with Emmanuel | Victor ([notas](ai-agents/README.md)) |
 
 Owners are a starting suggestion; swap if someone prefers another part.
@@ -58,13 +63,20 @@ Owners are a starting suggestion; swap if someone prefers another part.
 Needs Node.js 20+.
 
 ```bash
-git clone https://github.com/Afaguayo/Hackathon.git
-cd Hackathon
+git clone https://github.com/Afaguayo/hackathon.git
+cd hackathon
 npm install
-cp .env.example .env.local   # then fill in the ElevenLabs values and DATABASE_URL
+cp .env.example .env.local   # then fill in the values (ask Angel privately)
 npm run db:migrate           # create/update the database tables
-npm run dev                  # http://localhost:3000
+npm run dev                  # API on http://localhost:3000
+
+# second terminal: the Reed app
+cd frontend && npm install
+echo "VITE_CLERK_PUBLISHABLE_KEY=pk_test_..." > .env.local
+npm run dev                  # http://localhost:5173 (proxies /api to :3000)
 ```
+
+`npm run build` in the root builds both, exactly like Vercel does (frontend into `public/app/`, then Next).
 
 Without the keys the API routes return an error naming the missing variable.
 

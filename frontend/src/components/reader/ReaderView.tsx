@@ -10,8 +10,8 @@ import { QuizModal } from './QuizModal';
 import { ReedModePanel } from '../reed/ReedModePanel';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
-import { explainParagraph, summarizeChapter, generateQuiz } from '../../services/api';
-import { Volume2, HelpCircle, FileText, HelpCircle as QuizIcon, ArrowLeft } from 'lucide-react';
+import { explainParagraph, summarizeChapter, generateQuiz, isBackendSession, saveProgress, synthesizeSpeech } from '../../services/api';
+import { Volume2, HelpCircle, FileText, HelpCircle as QuizIcon, ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface ReaderViewProps {
   book: Book;
@@ -26,7 +26,10 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   onSelectBook,
   onBackToLibrary,
 }) => {
-  const currentChapter = book.chapters[0];
+  // Backend books open at the chapter where the reader left off; sample books at chapter 1.
+  const [chapterNumber, setChapterNumber] = useState<number>(book.currentChapterNumber || 1);
+  const chapterIndex = Math.max(0, book.chapters.findIndex(c => c.number === chapterNumber));
+  const currentChapter = book.chapters[chapterIndex] ?? book.chapters[0];
   const { mode, setMode, startSession, recordParagraphRead } = useReed();
 
   const [selectedParagraph, setSelectedParagraph] = useState<Paragraph | null>(null);
@@ -47,8 +50,70 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
 
+  const [isSummaryLoading, setIsSummaryLoading] = useState<boolean>(false);
+  const [isQuizLoading, setIsQuizLoading] = useState<boolean>(false);
+
   // Referencia a síntesis de voz (Web Speech API para lectura real en voz alta sincronizada)
   const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  // Voz de ElevenLabs (usuarios con sesión): un audio por párrafo, con el siguiente precargado.
+  // Si se acaba el límite diario o falla la reproducción, se usa la voz del navegador.
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCacheRef = useRef<Map<string, Promise<string>>>(new Map());
+  const useBrowserVoiceRef = useRef<boolean>(false);
+  const speechRunRef = useRef<number>(0); // cada nueva lectura invalida la anterior
+
+  const stopSpeech = () => {
+    speechRunRef.current++;
+    audioRef.current?.pause();
+    audioRef.current = null;
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  };
+
+  const getParagraphAudio = (paragraph: Paragraph) => {
+    let url = audioCacheRef.current.get(paragraph.id);
+    if (!url) {
+      url = synthesizeSpeech(paragraph.text);
+      url.catch(() => audioCacheRef.current.delete(paragraph.id));
+      audioCacheRef.current.set(paragraph.id, url);
+    }
+    return url;
+  };
+
+  // Al salir del lector: detener la voz y liberar los audios generados.
+  useEffect(() => {
+    const cache = audioCacheRef.current;
+    return () => {
+      stopSpeech();
+      cache.forEach(p => p.then(URL.revokeObjectURL).catch(() => {}));
+      cache.clear();
+    };
+  }, []);
+
+  // Cambiar de capítulo: detener la voz y reiniciar el estado del capítulo.
+  useEffect(() => {
+    stopSpeech();
+    setIsPlaying(false);
+    setActiveReadingIndex(-1);
+    setSelectedParagraph(null);
+    setSummaryText('');
+    setQuizQuestions([]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [chapterNumber]);
+
+  // Guardar el progreso de los libros del backend (posición = párrafo en todo el libro).
+  const progressIndex = activeReadingIndex >= 0
+    ? activeReadingIndex
+    : selectedParagraph ? currentChapter.paragraphs.findIndex(p => p.id === selectedParagraph.id) : -1;
+  useEffect(() => {
+    if (!book.documentId || !isBackendSession() || progressIndex < 0) return;
+    const position = (currentChapter.startIndex ?? 0) + progressIndex;
+    const total = book.totalParagraphs || position + 1;
+    const timer = setTimeout(() => {
+      saveProgress(book.documentId!, position, ((position + 1) / total) * 100).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [book.documentId, currentChapter.id, progressIndex]);
 
   // Iniciar registro de sesión al cargar el libro
   useEffect(() => {
@@ -58,9 +123,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   // Si se cambia a un modo distinto a "reader", pausar la voz de audio
   useEffect(() => {
     if (mode !== 'reader' && isPlaying) {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.pause();
-      }
+      stopSpeech();
       setIsPlaying(false);
     }
   }, [mode]);
@@ -84,10 +147,9 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   }, [isPlaying, playbackRate, mode]);
 
   // Manejo de lectura en voz alta
-  const speakCurrentParagraph = (index: number) => {
-    if (!('speechSynthesis' in window)) return;
-
-    window.speechSynthesis.cancel();
+  const speakCurrentParagraph = async (index: number) => {
+    stopSpeech();
+    const run = speechRunRef.current;
     if (index >= currentChapter.paragraphs.length) {
       setIsPlaying(false);
       setActiveReadingIndex(-1);
@@ -97,11 +159,8 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     const paragraph = currentChapter.paragraphs[index];
     recordParagraphRead(paragraph.order);
 
-    const utterance = new SpeechSynthesisUtterance(paragraph.text);
-    utterance.lang = 'es-ES';
-    utterance.rate = playbackRate;
-
-    utterance.onend = () => {
+    const playNext = () => {
+      if (run !== speechRunRef.current) return; // se detuvo o empezó otra lectura
       const nextIndex = index + 1;
       if (nextIndex < currentChapter.paragraphs.length) {
         setActiveReadingIndex(nextIndex);
@@ -112,8 +171,38 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
       }
     };
 
-    utterance.onerror = () => {
+    // 1) Voz de ElevenLabs
+    if (isBackendSession() && !useBrowserVoiceRef.current) {
+      try {
+        const url = await getParagraphAudio(paragraph);
+        if (run !== speechRunRef.current) return;
+        const audio = new Audio(url);
+        audio.playbackRate = playbackRate;
+        audio.onended = playNext;
+        audioRef.current = audio;
+        await audio.play();
+        const nextParagraph = currentChapter.paragraphs[index + 1];
+        if (nextParagraph) getParagraphAudio(nextParagraph).catch(() => {});
+        return;
+      } catch {
+        if (run !== speechRunRef.current) return;
+        useBrowserVoiceRef.current = true; // límite diario o error: seguir con la voz del navegador
+      }
+    }
+
+    // 2) Voz del navegador
+    if (!('speechSynthesis' in window)) {
       setIsPlaying(false);
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(paragraph.text);
+    utterance.lang = 'es-ES';
+    utterance.rate = playbackRate;
+
+    utterance.onend = playNext;
+
+    utterance.onerror = () => {
+      if (run === speechRunRef.current) setIsPlaying(false);
     };
 
     speechUtteranceRef.current = utterance;
@@ -122,9 +211,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
   const handleTogglePlay = () => {
     if (isPlaying) {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.pause();
-      }
+      stopSpeech();
       setIsPlaying(false);
     } else {
       setIsPlaying(true);
@@ -166,7 +253,9 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     const currentPos = rates.indexOf(playbackRate);
     const nextRate = rates[(currentPos + 1) % rates.length];
     setPlaybackRate(nextRate);
-    if (isPlaying) {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = nextRate; // ElevenLabs: cambia la velocidad sin reiniciar
+    } else if (isPlaying) {
       speakCurrentParagraph(activeReadingIndex >= 0 ? activeReadingIndex : 0);
     }
   };
@@ -214,10 +303,12 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     }
     setMode('companion');
     setIsSummaryOpen(true);
-    if (!summaryText) {
+    if (!summaryText && !isSummaryLoading) {
+      setIsSummaryLoading(true);
       const fullText = currentChapter.paragraphs.map(p => p.text).join('\n\n');
       const res = await summarizeChapter(currentChapter.title, fullText);
       setSummaryText(res);
+      setIsSummaryLoading(false);
     }
   };
 
@@ -228,10 +319,12 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     }
     setMode('teacher');
     setIsQuizOpen(true);
-    if (quizQuestions.length === 0) {
+    if (quizQuestions.length === 0 && !isQuizLoading) {
+      setIsQuizLoading(true);
       const fullText = currentChapter.paragraphs.map(p => p.text).join('\n\n');
       const res = await generateQuiz(currentChapter.title, fullText);
       setQuizQuestions(res);
+      setIsQuizLoading(false);
     }
   };
 
@@ -253,6 +346,29 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
               {book.title} · {currentChapter.title.split('·')[0]}
             </span>
             <Badge variant="ambar">Con voz</Badge>
+            {book.chapters.length > 1 && (
+              <div className="flex items-center gap-1 ml-1">
+                <button
+                  onClick={() => setChapterNumber(book.chapters[chapterIndex - 1].number)}
+                  disabled={chapterIndex === 0}
+                  aria-label="Capítulo anterior"
+                  className="p-1 rounded-md text-ink-muted hover:text-ink hover:bg-paper-sunk disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                >
+                  <ChevronLeft size={16} strokeWidth={2} />
+                </button>
+                <span className="text-xs text-ink-muted font-sans tabular-nums">
+                  {chapterIndex + 1}/{book.chapters.length}
+                </span>
+                <button
+                  onClick={() => setChapterNumber(book.chapters[chapterIndex + 1].number)}
+                  disabled={chapterIndex === book.chapters.length - 1}
+                  aria-label="Capítulo siguiente"
+                  className="p-1 rounded-md text-ink-muted hover:text-ink hover:bg-paper-sunk disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                >
+                  <ChevronRight size={16} strokeWidth={2} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -365,9 +481,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
             }
           }}
           onClose={() => {
-            if ('speechSynthesis' in window) {
-              window.speechSynthesis.pause();
-            }
+            stopSpeech();
             setIsPlaying(false);
             setMode('companion'); // Oculta la barra de audio y vuelve al modo compañero
           }}
@@ -418,6 +532,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
         onClose={() => setIsSummaryOpen(false)}
         chapterTitle={currentChapter.title}
         summaryText={summaryText}
+        isLoading={isSummaryLoading}
       />
 
       {/* Modal de Quiz interactivo */}
@@ -426,6 +541,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
         onClose={() => setIsQuizOpen(false)}
         questions={quizQuestions}
         chapterTitle={currentChapter.title}
+        isLoading={isQuizLoading}
       />
     </div>
   );

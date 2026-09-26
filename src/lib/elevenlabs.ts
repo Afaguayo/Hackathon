@@ -63,12 +63,12 @@ export async function getAgentSignedUrl(agentId = requireEnv("ELEVENLABS_AGENT_I
   return data.signed_url;
 }
 
-/** Uploads a file (PDF, TXT, EPUB, DOCX, HTML, MD) to the knowledge base; ElevenLabs extracts the text. */
-export async function uploadKnowledgeFile(file: Blob, name: string): Promise<string> {
-  const form = new FormData();
-  form.append("file", file, name);
-  form.append("name", name);
-  const res = await elevenlabs("/convai/knowledge-base/file", { method: "POST", body: form });
+/**
+ * Adds a document's text to the knowledge base. We send our own extracted text rather than the file
+ * because ElevenLabs' PDF extraction drops content, and the agent should see what the reader sees.
+ */
+export async function uploadKnowledgeText(text: string, name: string): Promise<string> {
+  const res = await elevenlabs("/convai/knowledge-base/text", { method: "POST", body: JSON.stringify({ text, name }) });
   const data = (await res.json()) as { id: string };
   return data.id;
 }
@@ -105,7 +105,7 @@ export async function createDocumentAgent(knowledgeBaseId: string, title: string
   // GET returns attached tools both as `tool_ids` and expanded `tools`; create accepts only one.
   if (config.agent.prompt.tool_ids?.length) delete config.agent.prompt.tools;
   config.agent.prompt.prompt += KNOWLEDGE_BASE_INSTRUCTIONS;
-  config.agent.prompt.knowledge_base = [{ type: "file", name: title, id: knowledgeBaseId, usage_mode: "auto" }];
+  config.agent.prompt.knowledge_base = [{ type: "text", name: title, id: knowledgeBaseId, usage_mode: "auto" }];
   config.agent.prompt.rag = { enabled: true };
 
   const res = await elevenlabs("/convai/agents/create", {

@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Gael's Vite app has its own tooling; its build output is copied into public/app.
+    "frontend/**",
+    "public/app/**",
   ]),
 ]);
 
