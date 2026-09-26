@@ -10,7 +10,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "build:web": "npm --prefix frontend ci --no-audit --no-fund && npm --prefix frontend run build",
+    "build:web": "npm --prefix frontend ci --include=dev --no-audit --no-fund && npm --prefix frontend run build",
     "dev:web": "npm --prefix frontend run dev"
   },
   "dependencies": {
