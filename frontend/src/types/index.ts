@@ -13,6 +13,8 @@ export interface Chapter {
   audioUrl?: string;
   duration?: number; // seconds
   whereYouLeftOffSummary?: string;
+  /** Backend books: index of this chapter's first paragraph across the whole book (for progress). */
+  startIndex?: number;
   paragraphs: Paragraph[];
 }
 
@@ -32,6 +34,11 @@ export interface Book {
   tags?: string[];
   recommendationReason?: string;
   curiosities?: string[];
+  /** Set for books stored in the backend (the user's uploads); sample books don't have it. */
+  documentId?: string;
+  totalParagraphs?: number;
+  /** Saved reading position: paragraph index across the whole book. */
+  progressPosition?: number;
   chapters: Chapter[];
 }
 

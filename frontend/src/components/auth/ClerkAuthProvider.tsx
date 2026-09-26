@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
-import { ClerkProvider, SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
+import { ClerkProvider, SignedIn, SignedOut, SignInButton, UserButton, useAuth } from '@clerk/clerk-react';
+import { setAuthTokenGetter } from '../../services/api';
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -19,13 +20,25 @@ const DemoAuthContext = createContext<DemoAuthContextType>({
 
 export const useDemoAuth = () => useContext(DemoAuthContext);
 
+// Whether API calls go to the backend as a signed-in Clerk user (false in demo mode or when signed out).
+const BackendAuthContext = createContext<{ backendSignedIn: boolean }>({ backendSignedIn: false });
+export const useBackendAuth = () => useContext(BackendAuthContext);
+
+const ClerkBackendBridge: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const backendSignedIn = Boolean(isLoaded && isSignedIn);
+  // Set during render (not in an effect) so children's first requests already carry the token.
+  setAuthTokenGetter(backendSignedIn ? () => getToken() : null);
+  return <BackendAuthContext.Provider value={{ backendSignedIn }}>{children}</BackendAuthContext.Provider>;
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isSignedIn, setIsSignedIn] = useState(true);
 
   if (CLERK_PUBLISHABLE_KEY && CLERK_PUBLISHABLE_KEY.startsWith('pk_')) {
     return (
       <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY}>
-        {children}
+        <ClerkBackendBridge>{children}</ClerkBackendBridge>
       </ClerkProvider>
     );
   }

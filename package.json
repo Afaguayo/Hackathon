@@ -4,21 +4,25 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run build:web && next build",
     "start": "next start",
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "build:web": "npm --prefix frontend ci --include=dev --no-audit --no-fund && npm --prefix frontend run build",
+    "dev:web": "npm --prefix frontend run dev"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.9.7",
     "@elevenlabs/react": "^1.15.2",
     "@neondatabase/serverless": "^1.1.0",
     "drizzle-orm": "^0.45.3",
+    "jszip": "^3.10.2",
     "next": "16.3.6",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "unpdf": "^1.8.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

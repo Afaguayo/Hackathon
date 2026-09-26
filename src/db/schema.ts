@@ -1,4 +1,5 @@
-import { index, integer, pgEnum, pgTable, primaryKey, real, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgEnum, pgTable, primaryKey, real, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import type { BookContent } from "../lib/book-text";
 
 // userId columns hold the auth provider's user id (Clerk later; a demo id until then).
 
@@ -19,6 +20,10 @@ export const documents = pgTable(
     error: text("error"),
     elevenlabsKnowledgeBaseId: text("elevenlabs_knowledge_base_id"),
     elevenlabsAgentId: text("elevenlabs_agent_id"),
+    // Extracted text for the reader: { chapters: [{ number, title, paragraphs: string[] }] }.
+    content: jsonb("content").$type<BookContent>(),
+    chapterCount: integer("chapter_count").notNull().default(0),
+    paragraphCount: integer("paragraph_count").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -90,7 +95,7 @@ export const notes = pgTable(
   (t) => [index("notes_user_doc_idx").on(t.userId, t.documentId)],
 );
 
-export const usageKind = pgEnum("usage_kind", ["tts_chars", "upload", "agent_session"]);
+export const usageKind = pgEnum("usage_kind", ["tts_chars", "upload", "agent_session", "ai_request"]);
 
 /** Paid ElevenLabs usage, one row per call; limits sum these over a rolling 24h window. */
 export const usageEvents = pgTable(
@@ -99,7 +104,7 @@ export const usageEvents = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     userId: text("user_id").notNull(),
     kind: usageKind("kind").notNull(),
-    amount: integer("amount").notNull(), // characters for tts_chars, 1 per upload / session
+    amount: integer("amount").notNull(), // characters for tts_chars, 1 per upload / session / AI request
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("usage_kind_created_idx").on(t.kind, t.createdAt), index("usage_user_kind_idx").on(t.userId, t.kind, t.createdAt)],

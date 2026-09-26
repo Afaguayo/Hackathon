@@ -15,6 +15,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  async rewrites() {
+    // The frontend (Vite app in frontend/) is built into public/app/ and served at the site root.
+    // It has no client-side routes, so only "/" maps to its index.html; /api/* stays with Next.
+    return { beforeFiles: [{ source: "/", destination: "/app/index.html" }] };
+  },
 };
 
 export default nextConfig;

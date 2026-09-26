@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { Book } from '../../types';
 import { Button } from '../ui/Button';
 import { X, Upload, FileText, AlertCircle } from 'lucide-react';
+import { ApiError, isBackendSession, uploadBook } from '../../services/api';
+
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+const CLERK_ENABLED = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY?.startsWith('pk_'));
 
 interface UploadBookModalProps {
   isOpen: boolean;
@@ -46,13 +50,48 @@ export const UploadBookModal: React.FC<UploadBookModalProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
       setError('Por favor escribe el título del libro.');
       return;
     }
 
+    // Signed in: upload to the backend, which extracts the chapters and prepares Reed for this book.
+    if (isBackendSession()) {
+      if (!file) {
+        setError('Elige el archivo del libro (EPUB, PDF o TXT).');
+        return;
+      }
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setError('El archivo pesa más de 4 MB. Prueba con un EPUB o un PDF más liviano.');
+        return;
+      }
+      setIsSubmitting(true);
+      setError(null);
+      try {
+        const book = await uploadBook(file, title.trim(), author.trim());
+        onBookUploaded(book);
+        onClose();
+      } catch (err) {
+        const status = err instanceof ApiError ? err.status : 0;
+        setError(
+          status === 422 ? 'No pude leer el texto de este archivo. Si es un PDF escaneado, prueba con un EPUB.'
+          : status === 429 ? 'Llegaste al límite de libros por hoy. Vuelve mañana.'
+          : status === 413 ? 'El archivo pesa más de 4 MB.'
+          : 'No pude subir el libro. Inténtalo de nuevo.',
+        );
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+    if (CLERK_ENABLED) {
+      setError('Inicia sesión para subir tus libros.');
+      return;
+    }
+
+    // Demo mode (no Clerk key): simulated upload.
     setIsSubmitting(true);
 
     // Simular procesamiento del libro y creación

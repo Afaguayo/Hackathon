@@ -1,5 +1,6 @@
 import { UnauthorizedError } from "./auth";
 import { ElevenLabsApiError, ElevenLabsConfigError } from "./elevenlabs";
+import { ReedAiError } from "./reed-ai";
 import { UsageLimitError } from "./usage";
 
 /** Shared JSON error shape for route handlers: { error }. */
@@ -12,6 +13,7 @@ export function handleRouteError(err: unknown, fallback: string) {
   if (err instanceof UnauthorizedError) return jsonError(err.message, 401);
   if (err instanceof UsageLimitError) return jsonError(err.message, 429);
   if (err instanceof ElevenLabsConfigError) return jsonError(err.message, 500);
+  if (err instanceof ReedAiError) return jsonError(err.message, 502);
   if (err instanceof Error && err.message.startsWith("DATABASE_URL is not set")) return jsonError(err.message, 500);
   console.error(err);
   if (err instanceof ElevenLabsApiError) return jsonError(`${fallback}: ElevenLabs returned ${err.status}`, 502);
