@@ -1,22 +1,18 @@
 # Frontend (responsable: Gael)
 
-Lo que el lector ve y usa: una app Next.js (React + Tailwind) desplegada en Vercel. Ver el [README del proyecto](../README.md).
+Lo que el lector ve y usa. Ver el [README del proyecto](../README.md).
 
-## Código
-- `src/app/page.tsx`: página principal (encabezado + lector).
-- `src/components/Reader.tsx`: pegar texto o subir un `.txt`, dividirlo en párrafos, seleccionar uno.
-- `src/components/ReadAloudButton.tsx`: botón **Leer en voz alta** → llama a `POST /api/tts` y reproduce el audio.
-- `src/components/CompanionPanel.tsx`: botón **Hablar con el compañero** → conversación de voz con el agente de ElevenLabs (`@elevenlabs/react`), le pasa el párrafo actual.
+## Estado
+**Todavía no hay interfaz.** `src/app/page.tsx` es solo una página de relleno. Primero decidimos en equipo cómo va a ser la app; ElevenLabs ya está conectado en el servidor y listo para usarse.
 
-## Ya hecho
-- Lector básico con selección de párrafo.
-- Leer en voz alta y conversación de voz conectados al backend.
+## Lo que la interfaz puede usar
+- `POST /api/tts` con `{ "text": "..." }` → devuelve audio MP3 (leer en voz alta). Máximo 2500 caracteres.
+- `GET /api/companion/signed-url` → devuelve `{ "signedUrl": "wss://..." }` para hablar con el agente de ElevenLabs.
+  - En React: envolver la página en `<ConversationProvider>` de `@elevenlabs/react` (ya instalado) y llamar `useConversation().startSession({ signedUrl, dynamicVariables: { passage, book_title } })`.
 
 ## Siguientes tareas
-1. Mejorar el diseño (tipografía de lectura, modo oscuro, móvil).
-2. Resaltar la frase que se está leyendo mientras suena el audio.
-3. Mostrar la transcripción de la conversación (callback `onMessage` de `useConversation`).
-4. Soporte para PDF además de `.txt`.
+1. Decidir en equipo cómo se ve y qué hace la app.
+2. Construir la interfaz en `src/app/` (y `src/components/` si hace falta).
 
 ## Para correrlo
 `npm install`, copiar `.env.example` a `.env.local` con las claves, `npm run dev` → http://localhost:3000.

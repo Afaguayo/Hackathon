@@ -1,37 +1,36 @@
 # AI Reading Companion
 
-An app that reads **with** you: paste or upload a text, and the companion reads it aloud and talks with you about what you are reading.
+An app that reads **with** you: it reads text aloud and talks with you about what you are reading.
+
+**Status:** only the ElevenLabs connection exists (server API routes). There is no UI yet; the page at `/` is a placeholder until we decide what the app looks like.
 
 ## Tech stack
 
 | Tech | What it does for us |
 |---|---|
-| **Next.js** (App Router, TypeScript, Tailwind) | The web app: reader UI + server API routes |
+| **Next.js** (App Router, TypeScript, Tailwind) | The web app: server API routes now, UI later |
 | **Vercel** | Deployment (every push to `main` deploys; PRs get preview URLs) |
-| **ElevenLabs Text to Speech** | "Read aloud": natural voice for the selected passage |
-| **ElevenLabs Agents** | "Talk to companion": live voice conversation about the passage |
+| **ElevenLabs Text to Speech** | Read text aloud with a natural voice |
+| **ElevenLabs Agents** | Live voice conversation about the passage |
 | Clerk, n8n, Zavu | Not wired yet; add when needed |
 
-## How the parts fit
+## API (what the future UI calls)
 
-```
- Browser (src/components)
-   ├─ "Read aloud"  ── POST /api/tts {text} ───────────┐
-   └─ "Talk"        ── GET  /api/companion/signed-url ─┤
-                                                        ▼
- Vercel server (src/app/api) ── src/lib/elevenlabs.ts ── ElevenLabs API
-   (holds ELEVENLABS_API_KEY; the browser never sees it)
-   └─ returns MP3 audio / a short-lived signed URL
- Browser then talks to the ElevenLabs agent directly over that signed URL,
- sending the current passage as {{passage}} and {{book_title}}.
-```
+| Endpoint | Does | Returns |
+|---|---|---|
+| `POST /api/tts` body `{ "text": "..." }` | ElevenLabs text to speech (max 2500 chars) | `audio/mpeg` |
+| `GET /api/companion/signed-url` | Starts a session with our private ElevenLabs agent | `{ "signedUrl": "wss://..." }` |
+
+Errors come back as `{ "error": "..." }`. The ElevenLabs key stays on the server (`src/lib/elevenlabs.ts`); the browser never sees it.
+
+To use the agent from a UI later: install nothing extra (`@elevenlabs/react` is already a dependency), wrap the page in `<ConversationProvider>`, and call `useConversation().startSession({ signedUrl, dynamicVariables: { passage, book_title } })`.
 
 ## Where the code lives and who owns it
 
 | Area | Files | Owner |
 |---|---|---|
 | Backend / API | `src/app/api/`, `src/lib/` | Emmanuel ([notes](backend/README.md)) |
-| Frontend / UI | `src/app/page.tsx`, `src/app/layout.tsx`, `src/components/` | Gael ([notas](frontend/README.md)) |
+| Frontend / UI (not started) | `src/app/page.tsx`, `src/app/layout.tsx` | Gael ([notas](frontend/README.md)) |
 | AI / ElevenLabs agent | Agent prompt + voice in the ElevenLabs dashboard, `src/lib/elevenlabs.ts` together with Emmanuel | Victor ([notas](ai-agents/README.md)) |
 
 Owners are a starting suggestion; swap if someone prefers another part.
@@ -48,18 +47,19 @@ cp .env.example .env.local   # then fill in the three ElevenLabs values
 npm run dev                  # http://localhost:3000
 ```
 
-Without the keys the page still loads; the buttons show which variable is missing.
+Without the keys the API routes return an error naming the missing variable.
 
-## ElevenLabs setup (once, by whoever owns the account)
+Quick test once the keys are in:
+```bash
+curl -X POST localhost:3000/api/tts -H 'Content-Type: application/json' -d '{"text":"Hello"}' -o hello.mp3
+curl localhost:3000/api/companion/signed-url
+```
 
-1. **API key**: ElevenLabs → Developers → API Keys → create one with Text to Speech and Agents access → `ELEVENLABS_API_KEY`.
-2. **Voice**: ElevenLabs → Voices → pick one → copy the Voice ID → `ELEVENLABS_VOICE_ID`.
-3. **Agent**: ElevenLabs → Agents → create an agent:
-   - System prompt, for example: *"You are a friendly reading companion. The reader is reading "{{book_title}}". Current passage: {{passage}}. Help them understand it: explain hard words, answer questions, ask short comprehension questions. Keep answers brief and spoken."*
-   - Turn on **authentication** (private agent), so only our server's signed URLs can start sessions.
-   - Copy the Agent ID → `ELEVENLABS_AGENT_ID`.
+## ElevenLabs setup
 
-Share keys privately (never in the repo or chat logs you'd paste publicly).
+Already done on Angel's ElevenLabs account: the API key, the voice (Sarah) and a private **Reading Companion** agent. The agent's prompt and settings are in [ai-agents/reading-companion-agent.md](ai-agents/reading-companion-agent.md).
+
+To get the three `ELEVENLABS_*` values for your `.env.local`, ask Angel privately. Never put them in the repo or in public chats.
 
 ## Deploy on Vercel
 

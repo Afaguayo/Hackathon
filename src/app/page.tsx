@@ -1,13 +1,12 @@
-import { Reader } from "@/components/Reader";
-
+// Placeholder until the team decides on the UI. The ElevenLabs integration lives in src/app/api.
 export default function Home() {
   return (
-    <main className="flex flex-1 flex-col">
-      <header className="border-b border-black/10 px-4 py-4 md:px-8 dark:border-white/15">
-        <h1 className="text-xl font-semibold">AI Reading Companion</h1>
-        <p className="text-sm opacity-70">Read along, listen, and talk through what you are reading.</p>
-      </header>
-      <Reader />
+    <main className="p-8 font-mono text-sm">
+      <h1 className="mb-4 text-lg font-semibold">AI Reading Companion: API only</h1>
+      <ul className="list-disc pl-5">
+        <li>POST /api/tts {"{ text }"} → audio/mpeg (ElevenLabs text to speech)</li>
+        <li>GET /api/companion/signed-url → {"{ signedUrl }"} (ElevenLabs agent session)</li>
+      </ul>
     </main>
   );
 }

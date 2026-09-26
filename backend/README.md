@@ -14,7 +14,7 @@ Errors come back as `{ error }` JSON: 400 bad input, 413 text too long, 500 miss
 - Signed URL for the ElevenLabs agent.
 
 ## Next tasks
-1. Add the real keys to `.env.local` and Vercel, then test both buttons end to end.
+1. Add the same keys to Vercel (they already work locally: TTS returned real audio and the agent returned a signed URL).
 2. Rate-limit `/api/tts` so a public deploy can't burn our ElevenLabs credits.
 3. Save books and reading progress (e.g. Vercel Postgres / Blob) if we want a library.
 4. Add auth (Clerk) if we need user accounts.
