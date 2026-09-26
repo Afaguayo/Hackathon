@@ -62,5 +62,13 @@ Manual steps, for reference or a new workspace:
 2. Uploads over 4 MB: upload straight to Vercel Blob from the browser, then hand the URL to the backend.
 3. Clerk webhook to delete a user's documents/agents when they delete their account.
 
+## Before going to production
+Fine to skip for the hackathon demo; do all of these before real users rely on the app.
+- [ ] **Rotate the Neon database password** (Neon → Roles → `neondb_owner` → Reset password), then update `DATABASE_URL` / `DATABASE_URL_UNPOOLED` in `.env` and in Vercel (Production + Preview) and redeploy. The current one was handled in plain text during setup.
+- [ ] **Clerk production instance**: needs a custom domain; swap in the `pk_live_` / `sk_live_` keys.
+- [ ] **Content-Security-Policy** header once the UI exists (allow Clerk and ElevenLabs domains).
+- [ ] Review usage limits (`LIMIT_*`) against the ElevenLabs plan's monthly characters.
+- [ ] Make sure no old Syncthing share still points at the project folder on any teammate's machine.
+
 ## Environment
 `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_AGENT_ID`, `ELEVENLABS_WEBHOOK_SECRET`, `ELEVENLABS_TOOL_SECRET`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, optional `LIMIT_*`. See `.env.example`. Locally the database URL lives in `.env` and the ElevenLabs values in `.env.local`; both are git-ignored.
