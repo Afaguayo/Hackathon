@@ -30,3 +30,7 @@ Thumbs.db
 next-env.d.ts
 *.pem
 npm-debug.log*
+.neon
+
+# Clerk keyless-mode keys (local dev)
+.clerk/
