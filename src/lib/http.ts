@@ -1,4 +1,6 @@
+import { UnauthorizedError } from "./auth";
 import { ElevenLabsApiError, ElevenLabsConfigError } from "./elevenlabs";
+import { UsageLimitError } from "./usage";
 
 /** Shared JSON error shape for route handlers: { error }. */
 export function jsonError(message: string, status: number) {
@@ -7,6 +9,8 @@ export function jsonError(message: string, status: number) {
 
 /** Maps known failures to clear responses and logs the rest. */
 export function handleRouteError(err: unknown, fallback: string) {
+  if (err instanceof UnauthorizedError) return jsonError(err.message, 401);
+  if (err instanceof UsageLimitError) return jsonError(err.message, 429);
   if (err instanceof ElevenLabsConfigError) return jsonError(err.message, 500);
   if (err instanceof Error && err.message.startsWith("DATABASE_URL is not set")) return jsonError(err.message, 500);
   console.error(err);

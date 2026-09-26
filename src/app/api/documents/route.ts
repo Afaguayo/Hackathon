@@ -3,6 +3,7 @@ import { getDb, schema } from "@/db";
 import { getUserId } from "@/lib/auth";
 import { createDocumentAgent, deleteAgent, deleteKnowledgeDoc, uploadKnowledgeFile } from "@/lib/elevenlabs";
 import { handleRouteError, jsonError } from "@/lib/http";
+import { consumeUsage } from "@/lib/usage";
 
 const { documents } = schema;
 
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
   let agentId: string | undefined;
   try {
     const userId = await getUserId();
+    await consumeUsage(userId, "upload");
     const db = getDb();
     [{ id: documentId }] = await db
       .insert(documents)

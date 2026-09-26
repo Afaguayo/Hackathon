@@ -2,7 +2,7 @@
 
 An app that reads **with** you: it reads text aloud and talks with you about what you are reading.
 
-**Status:** backend API only (ElevenLabs + database). There is no UI yet; the page at `/` is a placeholder until we decide what the app looks like.
+**Status:** backend API only (ElevenLabs + database + Clerk auth + usage limits). There is no UI yet; the page at `/` is a placeholder with sign-in buttons until we decide what the app looks like.
 
 ## Tech stack
 
@@ -13,7 +13,8 @@ An app that reads **with** you: it reads text aloud and talks with you about wha
 | **ElevenLabs Text to Speech** | Read text aloud with a natural voice |
 | **ElevenLabs Agents + Knowledge Base** | Live voice conversation; each uploaded document gets its own agent that can search the whole document |
 | **Neon Postgres + Drizzle ORM** | Documents, reading progress, conversations, notes |
-| Clerk, n8n, Zavu | Not wired yet; add when needed (all users are one demo user until Clerk) |
+| **Clerk** | Sign-in; every API route (except ElevenLabs callbacks) requires a signed-in user |
+| n8n, Zavu | Not wired yet; add when needed |
 
 ## API (what the future UI calls)
 
@@ -32,8 +33,13 @@ An app that reads **with** you: it reads text aloud and talks with you about wha
 | `POST /api/agent-tools/save-note` | *Called by the agent* mid-conversation (secret header) | `{ result }` |
 | `POST /api/tts` body `{ "text": "..." }` | ElevenLabs text to speech (max 2500 chars) | `audio/mpeg` |
 | `GET /api/companion/signed-url` | Session with the general companion agent (no document) | `{ signedUrl }` |
+| `GET /api/usage` | The user's usage in the last 24h vs. limits | `{ usage }` |
 
-Errors come back as `{ "error": "..." }` (400 bad input, 404 not found, 409 document not ready, 413 too large, 415 wrong file type, 502 ElevenLabs failed). The ElevenLabs key stays on the server (`src/lib/elevenlabs.ts`); the browser never sees it.
+**Auth:** calls from our own pages send the Clerk session cookie automatically; other clients send `Authorization: Bearer <Clerk session token>`.
+
+**Usage limits** (rolling 24h, per user / whole app): read aloud 5,000 / 20,000 characters, uploads 10 / 100, voice sessions 30 / 300. Change them with the `LIMIT_*` env vars in `.env.example`.
+
+Errors come back as `{ "error": "..." }` (400 bad input, 401 signed out, 404 not found, 409 document not ready, 413 too large, 415 wrong file type, 429 usage limit, 502 ElevenLabs failed). The ElevenLabs key stays on the server (`src/lib/elevenlabs.ts`); the browser never sees it.
 
 To use the agent from a UI later: install nothing extra (`@elevenlabs/react` is already a dependency), wrap the page in `<ConversationProvider>`, and call `useConversation().startSession({ signedUrl, dynamicVariables: { passage, book_title } })`.
 

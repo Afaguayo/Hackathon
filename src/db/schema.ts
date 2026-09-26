@@ -90,4 +90,20 @@ export const notes = pgTable(
   (t) => [index("notes_user_doc_idx").on(t.userId, t.documentId)],
 );
 
+export const usageKind = pgEnum("usage_kind", ["tts_chars", "upload", "agent_session"]);
+
+/** Paid ElevenLabs usage, one row per call; limits sum these over a rolling 24h window. */
+export const usageEvents = pgTable(
+  "usage_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id").notNull(),
+    kind: usageKind("kind").notNull(),
+    amount: integer("amount").notNull(), // characters for tts_chars, 1 per upload / session
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("usage_kind_created_idx").on(t.kind, t.createdAt), index("usage_user_kind_idx").on(t.userId, t.kind, t.createdAt)],
+);
+
 export type Document = typeof documents.$inferSelect;
+export type UsageKind = (typeof usageKind.enumValues)[number];

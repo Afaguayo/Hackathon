@@ -1,17 +1,17 @@
-import { ElevenLabsConfigError, getAgentSignedUrl } from "@/lib/elevenlabs";
+import { getUserId } from "@/lib/auth";
+import { getAgentSignedUrl } from "@/lib/elevenlabs";
+import { handleRouteError } from "@/lib/http";
+import { consumeUsage } from "@/lib/usage";
 
-// GET -> { signedUrl } for starting a voice conversation with the ElevenLabs agent.
-// The URL is short-lived and single-use, so it must never be cached.
+// GET -> { signedUrl } for a voice conversation with the general companion agent (no document).
+// Signed-in users only; each call counts as one agent session. Short-lived and single-use: never cache.
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
+    await consumeUsage(await getUserId(), "agent_session");
     return Response.json({ signedUrl: await getAgentSignedUrl() }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
-    if (err instanceof ElevenLabsConfigError) {
-      return Response.json({ error: err.message }, { status: 500 });
-    }
-    console.error(err);
-    return Response.json({ error: "Could not start a companion session" }, { status: 502 });
+    return handleRouteError(err, "Could not start a companion session");
   }
 }
