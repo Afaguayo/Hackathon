@@ -1,0 +1,23 @@
+# Secrets: never commit
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+.next/
+dist/
+build/
+.turbo/
+__pycache__/
+.venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Syncthing leftovers (we no longer use Syncthing)
+.stfolder/
+.stignore
+.syncthing.*
+*.sync-conflict-*
