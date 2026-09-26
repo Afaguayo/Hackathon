@@ -80,6 +80,8 @@ type AgentConfig = {
         prompt: string;
         knowledge_base?: { type: string; name: string; id: string; usage_mode: string }[];
         rag?: { enabled: boolean };
+        tool_ids?: string[];
+        tools?: unknown[];
       };
     } & Record<string, unknown>;
   } & Record<string, unknown>;
@@ -100,6 +102,8 @@ export async function createDocumentAgent(knowledgeBaseId: string, title: string
   ).json()) as AgentConfig;
 
   const config = template.conversation_config;
+  // GET returns attached tools both as `tool_ids` and expanded `tools`; create accepts only one.
+  if (config.agent.prompt.tool_ids?.length) delete config.agent.prompt.tools;
   config.agent.prompt.prompt += KNOWLEDGE_BASE_INSTRUCTIONS;
   config.agent.prompt.knowledge_base = [{ type: "file", name: title, id: knowledgeBaseId, usage_mode: "auto" }];
   config.agent.prompt.rag = { enabled: true };

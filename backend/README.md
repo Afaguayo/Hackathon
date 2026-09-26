@@ -40,7 +40,11 @@ Server side of the AI Reading Companion: Next.js route handlers on Vercel, Neon 
 - [x] Clerk auth on every user route; users only see their own data
 - [x] Usage limits (`usage_events` table): TTS characters, uploads, voice sessions
 
-## Hooking up ElevenLabs (after the first Vercel deploy; needs a public URL)
+## Hooking up ElevenLabs
+
+**Done** for https://reading-companion-navy.vercel.app: workspace webhook `Reading Companion transcripts` is the post-call webhook (transcripts), and the `save_note` tool is attached to the Reading Companion template agent (its secret header comes from the ElevenLabs secret `reading_companion_tool_secret`). New document agents copy the template, so they get the tool too. If the deploy URL changes, update both URLs in ElevenLabs.
+
+Manual steps, for reference or a new workspace:
 **Post-call webhook**
 1. ElevenLabs → Agents → Settings → Post-call webhook → add `https://<deploy>/api/webhooks/elevenlabs`, event "transcription".
 2. Copy the secret it shows into `ELEVENLABS_WEBHOOK_SECRET` (Vercel env + `.env.local`).
@@ -54,10 +58,9 @@ Server side of the AI Reading Companion: Next.js route handlers on Vercel, Neon 
 2. Add a line to the prompt: "When the reader asks you to remember something, call save_note."
 
 ## Next
-1. Deploy to Vercel, then hook up the ElevenLabs webhook + `save_note` tool (steps above).
-2. More agent tools: `quiz_me`, `define_word`.
-3. Uploads over 4 MB: upload straight to Vercel Blob from the browser, then hand the URL to the backend.
-4. Clerk webhook to delete a user's documents/agents when they delete their account.
+1. More agent tools: `quiz_me`, `define_word`.
+2. Uploads over 4 MB: upload straight to Vercel Blob from the browser, then hand the URL to the backend.
+3. Clerk webhook to delete a user's documents/agents when they delete their account.
 
 ## Environment
 `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_AGENT_ID`, `ELEVENLABS_WEBHOOK_SECRET`, `ELEVENLABS_TOOL_SECRET`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, optional `LIMIT_*`. See `.env.example`. Locally the database URL lives in `.env` and the ElevenLabs values in `.env.local`; both are git-ignored.

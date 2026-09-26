@@ -85,6 +85,10 @@ To get the three `ELEVENLABS_*` values for your `.env.local`, ask Angel privatel
 
 ## Deploy on Vercel
 
+**Live:** https://reading-companion-navy.vercel.app (Vercel project `reading-companion`, team REEF). Deployed with the CLI from the `backend` branch: `npx vercel deploy --prod`. Env vars are already set in the project.
+
+To set it up from scratch:
+
 1. vercel.com → **Add New… → Project** → import `Afaguayo/Hackathon` (framework: Next.js, root: `/`, defaults are fine).
 2. **Settings → Environment Variables**: add the three `ELEVENLABS_*` values (Production + Preview).
 3. **Storage → Create → Neon**: connect a database; Vercel adds `DATABASE_URL` for you. Run `npm run db:migrate` against it once (with its `DATABASE_URL` in your `.env`).
