@@ -9,8 +9,10 @@ El "cerebro" del compañero: la voz y el agente conversacional de ElevenLabs. Ve
   - `{{book_title}}`: el título del libro o artículo.
   Si el lector cambia de párrafo durante la conversación, la app se lo avisa al agente automáticamente.
 
+**El agente ya está creado.** Su configuración y prompt están en [reading-companion-agent.md](reading-companion-agent.md).
+
 ## Tareas
-1. Crear el agente en ElevenLabs → Agents:
+1. ~~Crear el agente en ElevenLabs → Agents~~ (hecho). Revisar y ajustar:
    - Prompt de sistema que use `{{passage}}` y `{{book_title}}` (hay un ejemplo en el README principal).
    - Primer mensaje, idioma, voz y LLM del agente.
    - Activar **autenticación** (agente privado) y pasar el Agent ID a quien maneje las claves.
