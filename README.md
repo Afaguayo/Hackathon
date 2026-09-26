@@ -25,6 +25,11 @@ An app that reads **with** you: it reads text aloud and talks with you about wha
 | `DELETE /api/documents/:id` | Delete it plus its ElevenLabs agent and knowledge-base file | `204` |
 | `GET /api/documents/:id/signed-url` | Voice session with **that document's** agent | `{ signedUrl }` |
 | `GET` / `PUT /api/documents/:id/progress` body `{ position, percent }` | Reading position | `{ progress }` |
+| `GET` / `POST /api/documents/:id/notes` body `{ text, quote?, type? }` | Notes, highlights, definitions | `{ notes }` / `201 { note }` |
+| `DELETE /api/documents/:id/notes/:noteId` | Delete a note | `204` |
+| `GET /api/documents/:id/conversations` | Past voice sessions with transcript + summary | `{ conversations }` |
+| `POST /api/webhooks/elevenlabs` | *Called by ElevenLabs* after each conversation (signed) | |
+| `POST /api/agent-tools/save-note` | *Called by the agent* mid-conversation (secret header) | `{ result }` |
 | `POST /api/tts` body `{ "text": "..." }` | ElevenLabs text to speech (max 2500 chars) | `audio/mpeg` |
 | `GET /api/companion/signed-url` | Session with the general companion agent (no document) | `{ signedUrl }` |
 

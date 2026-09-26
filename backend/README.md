@@ -10,8 +10,11 @@ Server side of the AI Reading Companion: Next.js route handlers on Vercel, Neon 
 | `drizzle/` | SQL migrations (generated; commit them) |
 | `src/lib/elevenlabs.ts` | TTS, signed URLs, knowledge-base upload, per-document agents |
 | `src/lib/auth.ts` | `getUserId()`: **demo user for now**, swap in Clerk here |
-| `src/lib/documents.ts`, `src/lib/http.ts` | Shared lookup and error helpers |
-| `src/app/api/documents/**` | Upload/list/get/delete documents, progress, per-document signed URL |
+| `src/lib/documents.ts`, `src/lib/http.ts` | Shared lookup (by user, by agent id) and error helpers |
+| `src/lib/webhook-signature.ts` | Verifies `ElevenLabs-Signature` (HMAC-SHA256, 30 min replay window) |
+| `src/app/api/documents/**` | Documents, progress, notes, conversations, per-document signed URL |
+| `src/app/api/webhooks/elevenlabs` | Post-call webhook: saves transcript + summary |
+| `src/app/api/agent-tools/save-note` | Server tool the agent calls to save a note |
 | `src/app/api/tts`, `src/app/api/companion/signed-url` | Read aloud; general companion session |
 
 ## How "ask about the whole book" works
@@ -26,13 +29,30 @@ Server side of the AI Reading Companion: Next.js route handlers on Vercel, Neon 
 - [x] Document upload → ElevenLabs knowledge base + per-document agent
 - [x] List / get / delete documents (with ElevenLabs cleanup)
 - [x] Reading progress (get / upsert)
+- [x] Notes: list / create / delete
+- [x] Post-call webhook → `conversations` + `messages` (signature-checked, idempotent on retries)
+- [x] Conversation history per document
+- [x] `save_note` server tool endpoint
+- [x] Deleting a document cascades to its progress, notes, conversations and messages
+
+## Hooking up ElevenLabs (after the first Vercel deploy; needs a public URL)
+**Post-call webhook**
+1. ElevenLabs → Agents → Settings → Post-call webhook → add `https://<deploy>/api/webhooks/elevenlabs`, event "transcription".
+2. Copy the secret it shows into `ELEVENLABS_WEBHOOK_SECRET` (Vercel env + `.env.local`).
+
+**`save_note` tool** (on the template agent, so new document agents inherit it; existing ones need it added too)
+1. ElevenLabs → Agents → Reading Companion → Tools → Add tool → Webhook:
+   - Name `save_note`; description "Save a note for the reader when they ask you to remember something."
+   - Method `POST`, URL `https://<deploy>/api/agent-tools/save-note`
+   - Header `x-agent-tool-secret` = the value of `ELEVENLABS_TOOL_SECRET` (make one: `openssl rand -hex 32`)
+   - Body: `agent_id` = dynamic variable `system__agent_id`; `text` (string, required, "what to remember"); `quote` (string, optional, "the passage it refers to")
+2. Add a line to the prompt: "When the reader asks you to remember something, call save_note."
 
 ## Next
-1. **Post-call webhook** `POST /api/webhooks/elevenlabs`: verify the HMAC signature, save transcript + summary into `conversations`/`messages`. Needs a public URL (Vercel deploy).
-2. **Agent server tools**: `save_note` (writes to `notes`), `quiz_me`, so the agent can act during a conversation.
-3. **Clerk auth**: replace `getUserId()`; everything is already scoped by user id.
-4. **Rate limiting** on `/api/tts` and uploads (Upstash Redis) to protect ElevenLabs credits.
-5. Uploads over 4 MB: upload straight to Vercel Blob from the browser, then hand the URL to the backend.
+1. **Clerk auth**: replace `getUserId()`; everything is already scoped by user id.
+2. **Rate limiting** on `/api/tts` and uploads (Upstash Redis) to protect ElevenLabs credits.
+3. More agent tools: `quiz_me`, `define_word`.
+4. Uploads over 4 MB: upload straight to Vercel Blob from the browser, then hand the URL to the backend.
 
 ## Environment
-`ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_AGENT_ID`, `DATABASE_URL`, `DATABASE_URL_UNPOOLED`. See `.env.example`. Locally the database URL lives in `.env` and the ElevenLabs values in `.env.local`; both are git-ignored.
+`ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_AGENT_ID`, `ELEVENLABS_WEBHOOK_SECRET`, `ELEVENLABS_TOOL_SECRET`, `DATABASE_URL`, `DATABASE_URL_UNPOOLED`. See `.env.example`. Locally the database URL lives in `.env` and the ElevenLabs values in `.env.local`; both are git-ignored.

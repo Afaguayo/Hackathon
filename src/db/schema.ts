@@ -46,7 +46,7 @@ export const conversations = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: text("user_id").notNull(),
-    documentId: uuid("document_id").references(() => documents.id, { onDelete: "set null" }),
+    documentId: uuid("document_id").references(() => documents.id, { onDelete: "cascade" }),
     elevenlabsConversationId: text("elevenlabs_conversation_id").unique(),
     summary: text("summary"),
     durationSeconds: integer("duration_seconds"),
