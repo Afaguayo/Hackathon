@@ -85,7 +85,7 @@ To get the three `ELEVENLABS_*` values for your `.env.local`, ask Angel privatel
 
 ## Deploy on Vercel
 
-**Live:** https://reading-companion-navy.vercel.app (Vercel project `reading-companion`, team REEF). Deployed with the CLI from the `backend` branch: `npx vercel deploy --prod`. Env vars are already set in the project.
+**Live:** https://reefai-app.vercel.app (Vercel project `reading-companion`, team REEF). Deployed with the CLI from the `backend` branch: `npx vercel deploy --prod`. Env vars are already set in the project.
 
 To set it up from scratch:
 
