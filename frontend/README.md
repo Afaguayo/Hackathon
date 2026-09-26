@@ -2,20 +2,17 @@
 
 Lo que el lector ve y usa. Ver el [README del proyecto](../README.md).
 
-## Tecnología
-- Una app web (por ejemplo Next.js / React).
-- **Clerk**: componentes de inicio de sesión / registro y sesión del usuario.
-- Reproductor de audio para la voz de **ElevenLabs** que genera [ai-agents](../ai-agents/README.md).
+## Estado
+**Todavía no hay interfaz.** `src/app/page.tsx` es solo una página de relleno. Primero decidimos en equipo cómo va a ser la app; ElevenLabs ya está conectado en el servidor y listo para usarse.
 
-## Primeras tareas
-1. Crear la app y agregar el inicio de sesión con Clerk.
-2. Página de biblioteca: ver mis libros y subir uno nuevo.
-3. Página de lectura: mostrar el texto y resaltar la frase que se está leyendo.
-4. Botones: **Leer en voz alta**, **Explícame esto**, **Resumir capítulo**, **Hazme un quiz**.
-5. Reproductor que toca el audio y sigue el texto mientras lee.
+## Lo que la interfaz puede usar
+- `POST /api/tts` con `{ "text": "..." }` → devuelve audio MP3 (leer en voz alta). Máximo 2500 caracteres.
+- `GET /api/companion/signed-url` → devuelve `{ "signedUrl": "wss://..." }` para hablar con el agente de ElevenLabs.
+  - En React: envolver la página en `<ConversationProvider>` de `@elevenlabs/react` (ya instalado) y llamar `useConversation().startSession({ signedUrl, dynamicVariables: { passage, book_title } })`.
 
-## Se comunica con
-- [backend](../backend/README.md): todos los datos pasan por su API; acuerden los endpoints desde el principio.
+## Siguientes tareas
+1. Decidir en equipo cómo se ve y qué hace la app.
+2. Construir la interfaz en `src/app/` (y `src/components/` si hace falta).
 
-## Claves necesarias (en `.env.local`, nunca se suben a GitHub)
-Clave pública de Clerk, URL de la API del backend.
+## Para correrlo
+`npm install`, copiar `.env.example` a `.env.local` con las claves, `npm run dev` → http://localhost:3000.

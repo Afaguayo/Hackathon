@@ -1,44 +1,74 @@
 # AI Reading Companion
 
-An app that reads **with** you: upload a book or article, and the companion reads it aloud, explains hard passages, quizzes you, and keeps you on track.
+An app that reads **with** you: it reads text aloud and talks with you about what you are reading.
+
+**Status:** only the ElevenLabs connection exists (server API routes). There is no UI yet; the page at `/` is a placeholder until we decide what the app looks like.
 
 ## Tech stack
 
 | Tech | What it does for us |
 |---|---|
-| **Clerk** | Sign-up / login, user sessions |
-| **AWS** | Hosting, API, file storage (books/PDFs), database |
-| **ElevenLabs** | Natural AI voice that reads text aloud |
-| **n8n** | Automation workflows (summaries, quizzes, reminders) |
-| **Zavu** | TBD: decide as a team how we use it |
+| **Next.js** (App Router, TypeScript, Tailwind) | The web app: server API routes now, UI later |
+| **Vercel** | Deployment (every push to `main` deploys; PRs get preview URLs) |
+| **ElevenLabs Text to Speech** | Read text aloud with a natural voice |
+| **ElevenLabs Agents** | Live voice conversation about the passage |
+| Clerk, n8n, Zavu | Not wired yet; add when needed |
 
-## How the parts fit
+## API (what the future UI calls)
 
-```
- [frontend]  ── Clerk login ──►  user
-     │  upload book, open reader, ask questions, press "read aloud"
-     ▼
- [backend]   AWS API + storage + DB, checks Clerk token
-     │  triggers workflows / requests audio
-     ▼
- [ai-agents] n8n workflows + LLM + ElevenLabs voice
-     │  returns summary / quiz / audio URL
-     ▼
- [backend] saves result ──► [frontend] shows it
-```
-
-## Folders and owners (one owner per folder to avoid sync conflicts)
-
-| Folder | Owner | Scope |
+| Endpoint | Does | Returns |
 |---|---|---|
-| [`backend/`](backend/README.md) | Emmanuel | AWS, API, database, Clerk token checks |
-| [`frontend/`](frontend/README.md) | Gael | Reader UI, Clerk sign-in, audio player |
-| [`ai-agents/`](ai-agents/README.md) | Victor | n8n workflows, ElevenLabs voice, AI prompts |
+| `POST /api/tts` body `{ "text": "..." }` | ElevenLabs text to speech (max 2500 chars) | `audio/mpeg` |
+| `GET /api/companion/signed-url` | Starts a session with our private ElevenLabs agent | `{ "signedUrl": "wss://..." }` |
+
+Errors come back as `{ "error": "..." }`. The ElevenLabs key stays on the server (`src/lib/elevenlabs.ts`); the browser never sees it.
+
+To use the agent from a UI later: install nothing extra (`@elevenlabs/react` is already a dependency), wrap the page in `<ConversationProvider>`, and call `useConversation().startSession({ signedUrl, dynamicVariables: { passage, book_title } })`.
+
+## Where the code lives and who owns it
+
+| Area | Files | Owner |
+|---|---|---|
+| Backend / API | `src/app/api/`, `src/lib/` | Emmanuel ([notes](backend/README.md)) |
+| Frontend / UI (not started) | `src/app/page.tsx`, `src/app/layout.tsx` | Gael ([notas](frontend/README.md)) |
+| AI / ElevenLabs agent | Agent prompt + voice in the ElevenLabs dashboard, `src/lib/elevenlabs.ts` together with Emmanuel | Victor ([notas](ai-agents/README.md)) |
 
 Owners are a starting suggestion; swap if someone prefers another part.
 
+## Run it locally
+
+Needs Node.js 20+.
+
+```bash
+git clone https://github.com/Afaguayo/Hackathon.git
+cd Hackathon
+npm install
+cp .env.example .env.local   # then fill in the three ElevenLabs values
+npm run dev                  # http://localhost:3000
+```
+
+Without the keys the API routes return an error naming the missing variable.
+
+Quick test once the keys are in:
+```bash
+curl -X POST localhost:3000/api/tts -H 'Content-Type: application/json' -d '{"text":"Hello"}' -o hello.mp3
+curl localhost:3000/api/companion/signed-url
+```
+
+## ElevenLabs setup
+
+Already done on Angel's ElevenLabs account: the API key, the voice (Sarah) and a private **Reading Companion** agent. The agent's prompt and settings are in [ai-agents/reading-companion-agent.md](ai-agents/reading-companion-agent.md).
+
+To get the three `ELEVENLABS_*` values for your `.env.local`, ask Angel privately. Never put them in the repo or in public chats.
+
+## Deploy on Vercel
+
+1. vercel.com → **Add New… → Project** → import `Afaguayo/Hackathon` (framework: Next.js, root: `/`, defaults are fine).
+2. **Settings → Environment Variables**: add the three `ELEVENLABS_*` values (Production + Preview).
+3. Deploy. From then on, every push to `main` redeploys and every PR gets a preview URL.
+
 ## Team rules
-- Only edit files in **your** folder. Shared files (this README, config) → say it in chat first.
-- Save = synced (Syncthing). Commit + push to GitHub for history.
-- Never put API keys in files. Use `.env` (not synced, not committed) and share keys privately.
-- If a `*.sync-conflict-*` file appears, merge it by hand and delete the copy.
+- Work on a branch and open a pull request; merge to `main` when it works.
+- `git pull` before you start; commit and push often.
+- Stay in your own files where possible; for shared files (`package.json`, this README) say it in chat first.
+- Never commit API keys. `.env.local` is git-ignored; use `.env.example` to document new variables.
