@@ -1,21 +1,23 @@
 # Backend (owner: Emmanuel)
 
-The API and data layer of the AI Reading Companion. See the [project README](../README.md).
+The server side of the AI Reading Companion, running as Next.js route handlers on Vercel. See the [project README](../README.md).
 
-## Tech
-- **AWS**: API (e.g. API Gateway + Lambda, or a small server), S3 for uploaded books/PDFs, a database (e.g. DynamoDB) for users' books, progress, notes.
-- **Clerk**: verify the Clerk session token on every request, so each user only sees their own books.
+## Code
+- `src/lib/elevenlabs.ts`: server-only ElevenLabs calls; reads the API key from env.
+- `src/app/api/tts/route.ts`: `POST { text }` → `audio/mpeg`. Max 2500 chars per request.
+- `src/app/api/companion/signed-url/route.ts`: `GET` → `{ signedUrl }` for a private agent session.
 
-## First tasks
-1. Pick the AWS setup (Lambda vs. one server) and create the project.
-2. Endpoint: upload a book → store it in S3 → save metadata in the DB.
-3. Endpoint: get a user's books and reading progress.
-4. Endpoint: request "read aloud" / "summarize" / "quiz" → call the [ai-agents](../ai-agents/README.md) workflows and return the result.
-5. Add Clerk token verification middleware.
+Errors come back as `{ error }` JSON: 400 bad input, 413 text too long, 500 missing env var, 502 ElevenLabs failed.
 
-## Talks to
-- [frontend](../frontend/README.md): agree on endpoint names and JSON shapes early.
-- [ai-agents](../ai-agents/README.md): agree on the n8n webhook URLs and payloads.
+## Done
+- Text-to-speech proxy (key stays on the server).
+- Signed URL for the ElevenLabs agent.
 
-## Secrets needed (in `.env`, never committed)
-AWS credentials, Clerk secret key, n8n webhook URL.
+## Next tasks
+1. Add the real keys to `.env.local` and Vercel, then test both buttons end to end.
+2. Rate-limit `/api/tts` so a public deploy can't burn our ElevenLabs credits.
+3. Save books and reading progress (e.g. Vercel Postgres / Blob) if we want a library.
+4. Add auth (Clerk) if we need user accounts.
+
+## Secrets (in `.env.local` / Vercel, never committed)
+`ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_AGENT_ID`. See `.env.example`.

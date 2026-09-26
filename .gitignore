@@ -21,3 +21,12 @@ Thumbs.db
 .stignore
 .syncthing.*
 *.sync-conflict-*
+
+# Next.js / Vercel
+/out/
+/coverage
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+*.pem
+npm-debug.log*

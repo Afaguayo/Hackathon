@@ -1,21 +1,22 @@
 # Frontend (responsable: Gael)
 
-Lo que el lector ve y usa. Ver el [README del proyecto](../README.md).
+Lo que el lector ve y usa: una app Next.js (React + Tailwind) desplegada en Vercel. Ver el [README del proyecto](../README.md).
 
-## Tecnología
-- Una app web (por ejemplo Next.js / React).
-- **Clerk**: componentes de inicio de sesión / registro y sesión del usuario.
-- Reproductor de audio para la voz de **ElevenLabs** que genera [ai-agents](../ai-agents/README.md).
+## Código
+- `src/app/page.tsx`: página principal (encabezado + lector).
+- `src/components/Reader.tsx`: pegar texto o subir un `.txt`, dividirlo en párrafos, seleccionar uno.
+- `src/components/ReadAloudButton.tsx`: botón **Leer en voz alta** → llama a `POST /api/tts` y reproduce el audio.
+- `src/components/CompanionPanel.tsx`: botón **Hablar con el compañero** → conversación de voz con el agente de ElevenLabs (`@elevenlabs/react`), le pasa el párrafo actual.
 
-## Primeras tareas
-1. Crear la app y agregar el inicio de sesión con Clerk.
-2. Página de biblioteca: ver mis libros y subir uno nuevo.
-3. Página de lectura: mostrar el texto y resaltar la frase que se está leyendo.
-4. Botones: **Leer en voz alta**, **Explícame esto**, **Resumir capítulo**, **Hazme un quiz**.
-5. Reproductor que toca el audio y sigue el texto mientras lee.
+## Ya hecho
+- Lector básico con selección de párrafo.
+- Leer en voz alta y conversación de voz conectados al backend.
 
-## Se comunica con
-- [backend](../backend/README.md): todos los datos pasan por su API; acuerden los endpoints desde el principio.
+## Siguientes tareas
+1. Mejorar el diseño (tipografía de lectura, modo oscuro, móvil).
+2. Resaltar la frase que se está leyendo mientras suena el audio.
+3. Mostrar la transcripción de la conversación (callback `onMessage` de `useConversation`).
+4. Soporte para PDF además de `.txt`.
 
-## Claves necesarias (en `.env.local`, nunca se suben a GitHub)
-Clave pública de Clerk, URL de la API del backend.
+## Para correrlo
+`npm install`, copiar `.env.example` a `.env.local` con las claves, `npm run dev` → http://localhost:3000.
