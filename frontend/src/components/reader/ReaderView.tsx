@@ -45,6 +45,18 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   const [pageIndex, setPageIndex] = useState(() => pageIndexForPosition(pages, initialChapter, initialPage));
   const page = pages[pageIndex];
 
+  // Infinite scroll: pages [renderRange.from, renderRange.to] are stacked; the one in view is pageIndex.
+  const [renderRange, setRenderRange] = useState(() => {
+    const start = pageIndexForPosition(pages, initialChapter, initialPage);
+    return { from: start, to: Math.min(pages.length - 1, start + 2) };
+  });
+  const pageRefs = useRef(new Map<number, HTMLElement>());
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const pendingScrollRef = useRef<number | null>(null);
+  // Page being read aloud (independent of scrolling while listening).
+  const speakingPageRef = useRef(pageIndex);
+  const [speakingPage, setSpeakingPage] = useState(pageIndex);
+
   const { mode, setMode, startSession, recordParagraphRead } = useReed();
   const { prefs, setPrefs, recordReaderUse, recordQuiz, recordNightSession, addReadingSeconds } = useAccount();
 
@@ -70,6 +82,22 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   pagesRef.current = pages;
   playingRef.current = isPlaying;
   rateRef.current = playbackRate;
+
+  const ensureRendered = (index: number) =>
+    setRenderRange((range) => ({
+      from: Math.min(range.from, index),
+      to: Math.max(range.to, Math.min(pagesRef.current.length - 1, index + 2)),
+    }));
+
+  const scrollToPage = (index: number) => {
+    pendingScrollRef.current = index;
+    ensureRendered(index);
+  };
+
+  const setSpeaking = (index: number) => {
+    speakingPageRef.current = index;
+    setSpeakingPage(index);
+  };
 
   // Voz de ElevenLabs (con sesión): un audio por párrafo, con el siguiente precargado. Si se acaba el
   // límite diario o falla la reproducción, se usa la voz del navegador.
@@ -108,7 +136,11 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
   useEffect(() => {
     const nextPages = paginateBook(book);
-    setPageIndex(pageIndexForPosition(nextPages, initialChapter, initialPage));
+    const start = pageIndexForPosition(nextPages, initialChapter, initialPage);
+    setPageIndex(start);
+    setRenderRange({ from: start, to: Math.min(nextPages.length - 1, start + 2) });
+    setSpeaking(start);
+    pageRefs.current.clear();
     setSelectedParagraph(null);
     setActiveReadingIndex(-1);
     setIsPlaying(false);
@@ -176,14 +208,55 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     };
   }, []);
 
+  // The page crossing the upper part of the screen is the current page (header, progress).
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting).map((e) => Number((e.target as HTMLElement).dataset.page));
+        if (visible.length) setPageIndex(Math.min(...visible));
+      },
+      { rootMargin: '-30% 0px -60% 0px' },
+    );
+    pageRefs.current.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, [renderRange.from, renderRange.to, book.id]);
+
+  // Load more pages before the reader reaches the end of what is rendered.
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setRenderRange((range) => ({ ...range, to: Math.min(pagesRef.current.length - 1, range.to + 3) }));
+        }
+      },
+      { rootMargin: '1200px 0px' },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [renderRange.to, book.id]);
+
+  // Jumps (table of contents, keyboard, voice moving on) scroll once the page is rendered.
+  useEffect(() => {
+    const target = pendingScrollRef.current;
+    if (target === null) return;
+    const element = pageRefs.current.get(target);
+    if (element) {
+      pendingScrollRef.current = null;
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+
   const goToPage = (index: number) => {
     stopSpeech();
     setIsPlaying(false);
     setActiveReadingIndex(-1);
     const next = Math.min(pages.length - 1, Math.max(0, index));
     setPageIndex(next);
+    setSpeaking(next);
     setSelectedParagraph(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToPage(next);
   };
 
   useEffect(() => {
@@ -205,16 +278,16 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   }, [pages.length]);
 
   const speakParagraph = async (index: number) => {
-    const current = pagesRef.current[pageIndexRef.current];
+    const current = pagesRef.current[speakingPageRef.current];
     if (!current) return;
     stopSpeech();
     const run = speechRunRef.current;
     if (index >= current.paragraphs.length) {
-      const nextPage = pageIndexRef.current + 1;
+      const nextPage = speakingPageRef.current + 1;
       if (nextPage < pagesRef.current.length) {
-        skipSpeechReset.current = true;
-        setPageIndex(nextPage);
-        setActiveReadingIndex(0);
+        setSpeaking(nextPage);
+        scrollToPage(nextPage);
+        speakParagraph(0);
         return;
       }
       setIsPlaying(false);
@@ -271,6 +344,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     }
     setMode('reader');
     setIsPlaying(true);
+    if (activeReadingIndex < 0) setSpeaking(pageIndexRef.current);
     const target = activeReadingIndex >= 0 ? activeReadingIndex : 0;
     setActiveReadingIndex(target);
     speakParagraph(target);
@@ -280,13 +354,16 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     if (!autoListen) return;
     setMode('reader');
     setIsPlaying(true);
+    setSpeaking(pageIndexRef.current);
     setActiveReadingIndex(0);
     speakParagraph(0);
   }, [book.id, autoListen]);
 
   const handleListenFrom = (paragraph: Paragraph) => {
-    const index = page?.paragraphs.findIndex((item) => item.id === paragraph.id) ?? -1;
-    if (index < 0) return;
+    const pageOf = pages.findIndex((item) => item.paragraphs.some((p) => p.id === paragraph.id));
+    if (pageOf < 0) return;
+    const index = pages[pageOf].paragraphs.findIndex((item) => item.id === paragraph.id);
+    setSpeaking(pageOf);
     setMode('reader');
     setIsPlaying(true);
     setActiveReadingIndex(index);
@@ -380,63 +457,68 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
         </header>
 
         <article className="mx-auto max-w-[40rem]">
-          {page.paragraphs.map((paragraph, index) => (
-            <ReadingParagraph
-              key={paragraph.id}
-              paragraph={paragraph}
-              textStyle={textStyle}
-              isReading={mode === 'reader' && activeReadingIndex === index}
-              isSelected={selectedParagraph?.id === paragraph.id}
-              onSelect={(item) => {
-                setSelectedParagraph(selectedParagraph?.id === item.id ? null : item);
-                recordParagraphRead(item.order);
-              }}
-              onAskAbout={(item) => {
-                setSelectedParagraph(item);
-                if (mode === 'sleeping') {
-                  showReedPanel(true);
-                  return;
-                }
-                setMode('teacher');
-                showReedPanel(true);
-              }}
-              onListenFrom={handleListenFrom}
-            />
-          ))}
-          <p className="text-center font-serif mt-12 mb-6 tracking-widest" style={{ color: theme.muted }}>
-            — {pageIndex + 1} —
-          </p>
-          <div className={`flex items-center justify-between text-sm pb-8 transition-opacity ${chrome ? 'opacity-100' : 'opacity-0'}`}>
-            <button type="button" onClick={() => goToPage(pageIndex - 1)} disabled={pageIndex === 0} className="disabled:opacity-30" style={{ color: theme.muted }}>
-              ← Página anterior
-            </button>
-            <button type="button" onClick={() => goToPage(pageIndex + 1)} disabled={pageIndex >= pages.length - 1} className="disabled:opacity-30" style={{ color: theme.muted }}>
-              Página siguiente →
-            </button>
-          </div>
+          {renderRange.from > 0 && (
+            <div className="text-center mb-10">
+              <button
+                type="button"
+                onClick={() => ensureRendered(Math.max(0, renderRange.from - 3))}
+                className="text-sm hover:opacity-70"
+                style={{ color: theme.muted }}
+              >
+                ↑ Ver páginas anteriores
+              </button>
+            </div>
+          )}
+          {pages.slice(renderRange.from, renderRange.to + 1).map((pg, offset) => {
+            const pIndex = renderRange.from + offset;
+            const previous = pages[pIndex - 1];
+            const newChapter = pIndex > renderRange.from && previous && previous.chapterNumber !== pg.chapterNumber;
+            return (
+              <section
+                key={pIndex}
+                data-page={pIndex}
+                ref={(element) => {
+                  if (element) pageRefs.current.set(pIndex, element);
+                  else pageRefs.current.delete(pIndex);
+                }}
+              >
+                {newChapter && <h2 className="font-serif text-2xl text-center mt-6 mb-10">{pg.chapterTitle}</h2>}
+                {pg.paragraphs.map((paragraph, index) => (
+                  <ReadingParagraph
+                    key={paragraph.id}
+                    paragraph={paragraph}
+                    textStyle={textStyle}
+                    isReading={mode === 'reader' && speakingPage === pIndex && activeReadingIndex === index}
+                    isSelected={selectedParagraph?.id === paragraph.id}
+                    onSelect={(item) => {
+                      setSelectedParagraph(selectedParagraph?.id === item.id ? null : item);
+                      recordParagraphRead(item.order);
+                    }}
+                    onAskAbout={(item) => {
+                      setSelectedParagraph(item);
+                      if (mode === 'sleeping') {
+                        showReedPanel(true);
+                        return;
+                      }
+                      setMode('teacher');
+                      showReedPanel(true);
+                    }}
+                    onListenFrom={handleListenFrom}
+                  />
+                ))}
+                <p className="text-center font-serif text-sm mt-10 mb-10 tracking-widest" style={{ color: theme.muted }}>
+                  — {pIndex + 1} —
+                </p>
+              </section>
+            );
+          })}
+          {renderRange.to < pages.length - 1 ? (
+            <div ref={sentinelRef} className="h-10" aria-hidden="true" />
+          ) : (
+            <p className="text-center font-serif mt-6 pb-10" style={{ color: theme.muted }}>Fin del libro</p>
+          )}
         </article>
       </div>
-
-      <button
-        type="button"
-        aria-label="Página anterior"
-        onClick={() => goToPage(pageIndex - 1)}
-        disabled={pageIndex === 0}
-        className={`hidden md:flex fixed left-4 top-1/2 -translate-y-1/2 w-10 h-10 items-center justify-center rounded-full border transition-opacity disabled:opacity-0 ${chrome ? 'opacity-60 hover:opacity-100' : 'opacity-0 pointer-events-none'}`}
-        style={{ borderColor: theme.muted, color: theme.fg, background: theme.page }}
-      >
-        <ChevronLeft size={18} />
-      </button>
-      <button
-        type="button"
-        aria-label="Página siguiente"
-        onClick={() => goToPage(pageIndex + 1)}
-        disabled={pageIndex >= pages.length - 1}
-        className={`hidden md:flex fixed right-4 top-1/2 -translate-y-1/2 w-10 h-10 items-center justify-center rounded-full border transition-opacity disabled:opacity-0 ${chrome ? 'opacity-60 hover:opacity-100' : 'opacity-0 pointer-events-none'}`}
-        style={{ borderColor: theme.muted, color: theme.fg, background: theme.page }}
-      >
-        <ChevronRight size={18} />
-      </button>
 
       {tocOpen && (
         <div className="fixed inset-0 z-40 bg-ink/30" onClick={() => setTocOpen(false)}>
@@ -489,7 +571,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
             if (isPlaying) speakParagraph(index);
           }}
           onNextParagraph={() => {
-            const index = Math.min((page.paragraphs.length || 1) - 1, activeReadingIndex + 1);
+            const index = Math.min((pages[speakingPageRef.current]?.paragraphs.length || 1) - 1, activeReadingIndex + 1);
             setActiveReadingIndex(index);
             if (isPlaying) speakParagraph(index);
           }}
@@ -510,6 +592,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
             onOpenModeAction={(modeKey) => {
               if (modeKey === 'reader') {
                 setIsPlaying(true);
+                if (activeReadingIndex < 0) setSpeaking(pageIndexRef.current);
                 const target = activeReadingIndex >= 0 ? activeReadingIndex : 0;
                 setActiveReadingIndex(target);
                 speakParagraph(target);
