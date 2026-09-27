@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useClerk, useUser } from '@clerk/clerk-react';
 import { Book, ReadingActivity, ReadingPrefs, ReadingStatus, UserBookRecord } from '../types';
-import { catalogBooks } from '../data/sampleBooks';
+import { listLibrary, loadBookContent } from '../services/api';
 import { evaluateBadges, isNightHour, localDate } from '../lib/badges';
 import { clerkEnabled } from '../lib/clerkEnv';
 import {
@@ -85,9 +85,16 @@ function touchToday(activity: ReadingActivity): ReadingActivity {
   return { ...activity, readDates: [...activity.readDates, today] };
 }
 
+// Sign-in is Clerk only (the backend only trusts Clerk sessions). Without a Clerk key there is no app.
 export const AccountProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   if (clerkEnabled) return <ClerkAccount>{children}</ClerkAccount>;
-  return <LocalAccount>{children}</LocalAccount>;
+  return (
+    <div className="min-h-screen bg-paper text-ink flex items-center justify-center p-6 text-center font-sans">
+      <p className="max-w-md text-sm text-ink-muted">
+        Falta configurar el inicio de sesión: agrega <code>VITE_CLERK_PUBLISHABLE_KEY</code> en <code>frontend/.env.local</code>.
+      </p>
+    </div>
+  );
 };
 
 const LocalAccount: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -270,7 +277,32 @@ const AccountState: React.FC<{
     }
   }, [user]);
 
-  const catalog = catalogBooks;
+  // Books come from the backend (the shared public-domain catalog + the user's uploads), with their
+  // chapters loaded up front so the reader can open them directly. Nothing loads while signed out.
+  const [catalog, setCatalog] = useState<Book[]>([]);
+  useEffect(() => {
+    if (!user) {
+      setCatalog([]);
+      return;
+    }
+    let cancelled = false;
+    listLibrary()
+      .then((books) => Promise.all(books.map((book) => loadBookContent(book).catch(() => null))))
+      .then((books) => {
+        if (!cancelled) setCatalog(books.filter((book): book is Book => Boolean(book && book.chapters.length)));
+      })
+      .catch(() => !cancelled && setToast('No pude cargar tus libros. Recarga la página.'));
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  // New users start with every backend book already in their library.
+  useEffect(() => {
+    if (!user || !catalog.length) return;
+    const missing = catalog.filter((book) => !libraryRef.current.some((record) => record.bookId === book.id));
+    if (missing.length) commit([...libraryRef.current, ...missing.map((book) => freshUserBook(book.id))], activityRef.current);
+  }, [catalog, user?.id]);
 
   const getBook = useCallback((bookId: string) => {
     return uploads.find((book) => book.id === bookId) || catalog.find((book) => book.id === bookId);
