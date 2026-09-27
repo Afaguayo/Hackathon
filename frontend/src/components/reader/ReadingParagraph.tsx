@@ -6,6 +6,7 @@ interface ReadingParagraphProps {
   paragraph: Paragraph;
   isReading: boolean;
   isSelected: boolean;
+  textStyle?: React.CSSProperties;
   onSelect: (paragraph: Paragraph) => void;
   onAskAbout: (paragraph: Paragraph) => void;
   onListenFrom: (paragraph: Paragraph) => void;
@@ -15,6 +16,7 @@ export const ReadingParagraph: React.FC<ReadingParagraphProps> = ({
   paragraph,
   isReading,
   isSelected,
+  textStyle,
   onSelect,
   onAskAbout,
   onListenFrom,
@@ -40,7 +42,7 @@ export const ReadingParagraph: React.FC<ReadingParagraphProps> = ({
             : 'text-ink hover:bg-paper-sunk/50'
         }`}
       >
-        <p className="font-serif text-[19px] sm:text-[20px] leading-[32px] max-w-[65ch]">
+        <p className="max-w-[65ch]" style={textStyle}>
           {paragraph.text}
         </p>
       </div>

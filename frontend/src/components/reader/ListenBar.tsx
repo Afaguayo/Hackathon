@@ -12,6 +12,8 @@ interface ListenBarProps {
   onPrevParagraph?: () => void;
   onNextParagraph?: () => void;
   onOpenReedAction?: (actionType: string) => void;
+  menuOpen?: boolean;
+  onMenuOpenChange?: (open: boolean) => void;
   onClose?: () => void;
 }
 
@@ -25,6 +27,8 @@ export const ListenBar: React.FC<ListenBarProps> = ({
   onPrevParagraph,
   onNextParagraph,
   onOpenReedAction,
+  menuOpen,
+  onMenuOpenChange,
   onClose,
 }) => {
   return (
@@ -107,7 +111,11 @@ export const ListenBar: React.FC<ListenBarProps> = ({
           <div className="h-6 w-[1px] bg-line mx-0.5 sm:mx-1" />
 
           {/* BURBUJA DE REED INTEGRADA EN LA BARRA (Sección 1 y 7) */}
-          <ReedBubble onOpenModeAction={onOpenReedAction} />
+          <ReedBubble
+            menuOpen={menuOpen}
+            onMenuOpenChange={onMenuOpenChange}
+            onOpenModeAction={onOpenReedAction}
+          />
 
           {onClose && (
             <button

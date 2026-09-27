@@ -6,7 +6,7 @@ export const initialBooks: Book[] = [
     title: 'Cien años de soledad',
     author: 'Gabriel García Márquez',
     currentChapterNumber: 1,
-    totalChapters: 20,
+    totalChapters: 1,
     progressPercent: 15,
     whereYouLeftOff: 'Quedaste en la llegada del hielo.',
     hasAudio: true,
@@ -68,7 +68,7 @@ export const initialBooks: Book[] = [
     title: 'La fábula del junco',
     author: 'Esopo',
     currentChapterNumber: 3,
-    totalChapters: 12,
+    totalChapters: 3,
     progressPercent: 38,
     whereYouLeftOff: 'Quedaste en la tormenta.',
     hasAudio: true,
@@ -83,6 +83,42 @@ export const initialBooks: Book[] = [
       'Jean de La Fontaine reescribió esta misma fábula siglos después bajo el título "El roble y el junco".'
     ],
     chapters: [
+      {
+        id: 'cap-junco-1',
+        number: 1,
+        title: 'Capítulo 1 · La orilla',
+        whereYouLeftOffSummary: 'El junco y la encina crecen juntos junto al río.',
+        paragraphs: [
+          {
+            id: 'pj-c1-1',
+            order: 1,
+            text: 'Junto al río crecían dos vecinos distintos: una encina que levantaba su copa por encima de todos, y un junco delgado que apenas se distinguía entre las hierbas.'
+          },
+          {
+            id: 'pj-c1-2',
+            order: 2,
+            text: 'El agua pasaba despacio. El junco la saludaba cada tarde doblando la punta, sin pedir nada a cambio. La encina, en cambio, miraba el cielo y se creía inmóvil para siempre.'
+          }
+        ]
+      },
+      {
+        id: 'cap-junco-2',
+        number: 2,
+        title: 'Capítulo 2 · El orgullo de la encina',
+        whereYouLeftOffSummary: 'La encina se burla del junco por doblarse.',
+        paragraphs: [
+          {
+            id: 'pj-c2-1',
+            order: 1,
+            text: 'La encina se burlaba del junco. Decía que la fortaleza era no moverse, y que doblarse era cosa de débiles.'
+          },
+          {
+            id: 'pj-c2-2',
+            order: 2,
+            text: 'El junco escuchaba en silencio. Había aprendido del río que lo que no cede, a veces se parte. No discutió. Esperó al viento.'
+          }
+        ]
+      },
       {
         id: 'cap-junco-3',
         number: 3,
@@ -115,7 +151,7 @@ export const initialBooks: Book[] = [
     title: 'El amor en los tiempos del cólera',
     author: 'Gabriel García Márquez',
     currentChapterNumber: 1,
-    totalChapters: 6,
+    totalChapters: 1,
     progressPercent: 0,
     whereYouLeftOff: 'Por empezar',
     hasAudio: true,
@@ -154,7 +190,7 @@ export const initialBooks: Book[] = [
     title: 'Pedro Páramo',
     author: 'Juan Rulfo',
     currentChapterNumber: 1,
-    totalChapters: 10,
+    totalChapters: 1,
     progressPercent: 100,
     whereYouLeftOff: 'Terminado',
     hasAudio: false,
@@ -187,7 +223,7 @@ export const initialBooks: Book[] = [
     title: 'El Principito',
     author: 'Antoine de Saint-Exupéry',
     currentChapterNumber: 2,
-    totalChapters: 27,
+    totalChapters: 1,
     progressPercent: 20,
     whereYouLeftOff: 'Quedaste en el dibujo del cordero.',
     hasAudio: true,
@@ -217,3 +253,5 @@ export const initialBooks: Book[] = [
     ]
   }
 ];
+
+export const catalogBooks = initialBooks;

@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { Book } from '../../types';
 import { Button } from '../ui/Button';
-import { X, Upload, FileText, AlertCircle } from 'lucide-react';
+import { X, Upload, AlertCircle } from 'lucide-react';
+import { extractPdfChapters, isPdfFile, withTimeout } from '../../lib/pdf';
+import { buildUploadedBook, chaptersFromPlainText } from '../../lib/reading';
 
 interface UploadBookModalProps {
   isOpen: boolean;
   onClose: () => void;
   onBookUploaded: (newBook: Book) => void;
 }
+
+type Phase = 'idle' | 'uploading' | 'preparing' | 'ready';
 
 export const UploadBookModal: React.FC<UploadBookModalProps> = ({
   isOpen,
@@ -18,175 +22,160 @@ export const UploadBookModal: React.FC<UploadBookModalProps> = ({
   const [author, setAuthor] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [phase, setPhase] = useState<Phase>('idle');
 
   if (!isOpen) return null;
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (!selectedFile) return;
-
-    const validExtensions = ['.epub', '.pdf', '.txt', '.md'];
-    const fileName = selectedFile.name.toLowerCase();
-    const isValid = validExtensions.some(ext => fileName.endsWith(ext));
-
-    if (!isValid) {
-      setError('No pude abrir este archivo. Prueba con un EPUB o PDF.');
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = event.target.files?.[0];
+    if (!selected) return;
+    const name = selected.name.toLowerCase();
+    const allowed = name.endsWith('.pdf') || name.endsWith('.txt') || name.endsWith('.md');
+    if (!allowed) {
+      setError('Puedo preparar PDF o texto. Prueba con uno de esos archivos.');
       setFile(null);
+      return;
+    }
+    setError(null);
+    setFile(selected);
+    if (!title) {
+      setTitle(selected.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' '));
+    }
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!file) {
+      setError('Elige un archivo para continuar.');
+      return;
+    }
+    if (!title.trim()) {
+      setError('Escribe el título del libro.');
       return;
     }
 
     setError(null);
-    setFile(selectedFile);
+    setPhase('uploading');
 
-    // Auto extract title from filename
-    if (!title) {
-      const cleanName = selectedFile.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-      setTitle(cleanName);
+    try {
+      const name = file.name.toLowerCase();
+      let chapters;
+      if (name.endsWith('.pdf') || file.type === 'application/pdf') {
+        const valid = await isPdfFile(file);
+        if (!valid) {
+          setError('Este archivo no es un PDF válido.');
+          setPhase('idle');
+          return;
+        }
+        setPhase('preparing');
+        chapters = await withTimeout(
+          extractPdfChapters(file),
+          25000,
+          'La preparación tardó demasiado. Prueba con un PDF más corto.',
+        );
+        if (!chapters.length) {
+          setError('No pudimos extraer correctamente el texto de este PDF.');
+          setPhase('idle');
+          return;
+        }
+      } else {
+        setPhase('preparing');
+        const raw = await file.text();
+        chapters = chaptersFromPlainText(raw);
+        if (!chapters.length) {
+          setError('No encontramos texto para leer en este archivo.');
+          setPhase('idle');
+          return;
+        }
+      }
+
+      const book = buildUploadedBook(title, author, chapters);
+      setPhase('ready');
+      window.setTimeout(() => {
+        onBookUploaded(book);
+        setPhase('idle');
+        setFile(null);
+        setTitle('');
+        setAuthor('');
+        onClose();
+      }, 500);
+    } catch (caught) {
+      const message = caught instanceof Error && caught.message.startsWith('La preparación')
+        ? caught.message
+        : 'No pudimos extraer correctamente el texto de este PDF.';
+      setError(message);
+      setPhase('idle');
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) {
-      setError('Por favor escribe el título del libro.');
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    // Simular procesamiento del libro y creación
-    setTimeout(() => {
-      const newBook: Book = {
-        id: `book-${Date.now()}`,
-        title: title.trim(),
-        author: author.trim() || 'Autor desconocido',
-        currentChapterNumber: 1,
-        totalChapters: 5,
-        progressPercent: 0,
-        whereYouLeftOff: 'Capítulo 1 · Inicio de lectura',
-        hasAudio: true,
-        chapters: [
-          {
-            id: `ch-1-${Date.now()}`,
-            number: 1,
-            title: 'Capítulo 1 · Introducción',
-            whereYouLeftOffSummary: 'Comienzo del libro.',
-            paragraphs: [
-              {
-                id: `p-new-1`,
-                order: 1,
-                text: file
-                  ? `Se ha cargado con éxito el archivo "${file.name}". Reed está listo para acompañarte en la lectura de esta obra.`
-                  : 'El libro comienza aquí con calma y claridad.'
-              },
-              {
-                id: `p-new-2`,
-                order: 2,
-                text: 'Puedes seleccionar cualquier párrafo para conversar con Reed, pedir una explicación o escuchar con la voz de ElevenLabs.'
-              }
-            ]
-          }
-        ]
-      };
-
-      onBookUploaded(newBook);
-      setIsSubmitting(false);
-      onClose();
-    }, 600);
-  };
+  const phaseLabel = phase === 'uploading'
+    ? 'Subiendo libro...'
+    : phase === 'preparing'
+      ? 'Preparando tu libro...'
+      : phase === 'ready'
+        ? 'Listo para leer.'
+        : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-sm">
       <div className="bg-paper-raised border border-line rounded-lg w-full max-w-lg p-6 shadow-xl relative">
         <button
           onClick={onClose}
+          disabled={phase === 'uploading' || phase === 'preparing'}
           className="absolute top-4 right-4 p-1.5 rounded-md text-ink-muted hover:text-ink hover:bg-paper-sunk transition-colors"
           aria-label="Cerrar ventana"
         >
           <X size={20} strokeWidth={1.75} />
         </button>
 
-        <h3 className="font-serif font-semibold text-2xl text-ink mb-1">
-          Subir un libro
-        </h3>
+        <h3 className="font-serif font-semibold text-2xl text-ink mb-1">Subir un libro</h3>
         <p className="text-sm text-ink-muted mb-5">
-          Sube un archivo EPUB, PDF o texto para leer y escuchar con Reed.
+          El PDF se convierte en texto para leerlo con calma, como en un libro.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1.5 font-sans">
-              Título del libro
-            </label>
+          <label className="block">
+            <span className="block text-xs font-bold text-ink uppercase tracking-wider mb-1.5">Título del libro</span>
             <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(event) => setTitle(event.target.value)}
               placeholder="Ej. La sombra del viento"
-              required
-              className="w-full px-3.5 py-2.5 rounded-md bg-paper border border-line-strong text-ink placeholder:text-ink-muted text-sm focus:border-focus transition-colors"
+              className="w-full px-3.5 py-2.5 rounded-md bg-paper border border-line-strong text-ink placeholder:text-ink-muted text-sm"
             />
-          </div>
+          </label>
 
-          <div>
-            <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1.5 font-sans">
-              Autor
-            </label>
+          <label className="block">
+            <span className="block text-xs font-bold text-ink uppercase tracking-wider mb-1.5">Autor</span>
             <input
               type="text"
               value={author}
-              onChange={(e) => setAuthor(e.target.value)}
+              onChange={(event) => setAuthor(event.target.value)}
               placeholder="Ej. Carlos Ruiz Zafón"
-              className="w-full px-3.5 py-2.5 rounded-md bg-paper border border-line-strong text-ink placeholder:text-ink-muted text-sm focus:border-focus transition-colors"
+              className="w-full px-3.5 py-2.5 rounded-md bg-paper border border-line-strong text-ink placeholder:text-ink-muted text-sm"
             />
-          </div>
+          </label>
 
-          <div>
-            <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1.5 font-sans">
-              Archivo del libro
-            </label>
-            <label className="border-2 border-dashed border-line-strong rounded-md p-6 flex flex-col items-center justify-center cursor-pointer hover:bg-paper-sunk transition-colors text-center">
+          <label className="block">
+            <span className="block text-xs font-bold text-ink uppercase tracking-wider mb-1.5">Archivo</span>
+            <span className="border-2 border-dashed border-line-strong rounded-md p-6 flex flex-col items-center justify-center cursor-pointer hover:bg-paper-sunk transition-colors text-center">
               <Upload size={28} strokeWidth={1.75} className="text-reed mb-2" />
-              {file ? (
-                <div className="flex items-center gap-2 text-ink text-sm font-medium">
-                  <FileText size={16} />
-                  <span>{file.name}</span>
-                </div>
-              ) : (
-                <>
-                  <span className="text-sm font-semibold text-ink">
-                    Elige un archivo o arrástralo aquí
-                  </span>
-                  <span className="text-xs text-ink-muted mt-1">
-                    Archivos soportados: EPUB, PDF, TXT
-                  </span>
-                </>
-              )}
-              <input
-                type="file"
-                accept=".epub,.pdf,.txt,.md"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-            </label>
-          </div>
+              <span className="text-sm text-ink">{file ? file.name : 'PDF, TXT o Markdown'}</span>
+              <input type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" className="hidden" onChange={handleFileChange} />
+            </span>
+          </label>
 
+          {phaseLabel && <p className="text-sm text-ink">{phaseLabel}</p>}
           {error && (
-            <div className="p-3 rounded-md bg-danger/10 border border-danger text-danger text-xs flex items-center gap-2">
-              <AlertCircle size={16} />
+            <p className="text-sm text-danger flex items-start gap-2">
+              <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
               <span>{error}</span>
-            </div>
+            </p>
           )}
 
-          <div className="flex justify-end gap-3 pt-3 border-t border-line">
-            <Button variant="secondary" type="button" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button variant="primary" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Guardando...' : 'Agregar a mi biblioteca'}
-            </Button>
-          </div>
+          <Button type="submit" variant="primary" className="w-full" disabled={phase === 'uploading' || phase === 'preparing' || phase === 'ready'}>
+            {phase === 'idle' ? 'Preparar libro' : phaseLabel}
+          </Button>
         </form>
       </div>
     </div>

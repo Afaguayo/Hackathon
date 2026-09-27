@@ -4,6 +4,8 @@ export interface Paragraph {
   id: string;
   order: number;
   text: string;
+  /** When true, this paragraph is its own page (for example a PDF page). */
+  pageBreak?: boolean;
 }
 
 export interface Chapter {
@@ -51,6 +53,45 @@ export interface QuizQuestion {
   correctIndex: number;
   explanation: string;
   type?: 'multiple' | 'boolean' | 'comprehension';
+}
+
+export type ReadingStatus = 'unread' | 'reading' | 'finished';
+
+export type AppView = 'library' | 'catalog' | 'profile' | 'reader';
+
+/** Progress belongs to the user, not to the catalog book. */
+export interface UserBookRecord {
+  bookId: string;
+  currentChapter: number;
+  currentPage: number;
+  progress: number;
+  status: ReadingStatus;
+  addedAt: string;
+  lastReadAt: string | null;
+}
+
+export interface ReadingPrefs {
+  fontScale: 'sm' | 'md' | 'lg';
+  font: 'serif' | 'sans';
+  leading: 'compact' | 'normal' | 'wide';
+  theme: 'light' | 'sepia' | 'dark';
+}
+
+export interface ReadingActivity {
+  readDates: string[];
+  nightSessions: number;
+  readerModeUses: number;
+  quizzesCompleted: number;
+  readingSeconds: number;
+  unlocked: string[];
+}
+
+export interface BadgeDefinition {
+  id: string;
+  name: string;
+  description: string;
+  requirement: string;
+  emoji: string;
 }
 
 export interface ReadingSessionStats {

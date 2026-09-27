@@ -26,9 +26,8 @@ export const Button: React.FC<ButtonProps> = ({
     // Verde junco: un solo botón verde por vista
     primary: 'bg-reed text-on-reed hover:bg-reed-strong active:scale-[0.99] shadow-sm',
     // Secundario: borde line-strong sobre paper
-    secondary: 'border border-line-strong text-ink hover:bg-paper-sunk active:scale-[0.99]',
-    // Quiet: sin bordes visibles
-    quiet: 'text-ink hover:bg-paper-sunk active:bg-paper-sunk',
+    secondary: 'bg-clay text-on-clay border border-clay-strong hover:brightness-95 active:scale-[0.99]',
+    quiet: 'text-ink hover:bg-clay hover:text-on-clay active:bg-clay',
     // Ámbar: solo para la voz / audio
     voice: 'bg-ambar text-on-ambar hover:brightness-105 active:scale-[0.99] shadow-sm',
   };

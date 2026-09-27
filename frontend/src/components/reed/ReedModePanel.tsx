@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Book, Paragraph, QuizQuestion } from '../../types';
+import React, { useEffect, useRef, useState } from 'react';
+import { Book, Paragraph, QuizQuestion, ReedMode } from '../../types';
 import { useReed } from '../../context/ReedContext';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
@@ -16,19 +16,47 @@ import {
   Search,
   Check
 } from 'lucide-react';
+import sleeping from '../../assets/reed/sleeping.png';
+import companion from '../../assets/reed/companion.png';
+import teacher from '../../assets/reed/teacher.png';
+import librarian from '../../assets/reed/librarian.png';
+import reader from '../../assets/reed/reader.png';
+
+const modePortraits: Record<ReedMode, string> = {
+  sleeping,
+  companion,
+  teacher,
+  librarian,
+  reader,
+};
 
 interface ReedModePanelProps {
   book: Book;
   allBooks: Book[];
   currentParagraph: Paragraph | null;
+  chapterTitle?: string;
+  progressPercent?: number;
+  chapterCompleted?: boolean;
+  onQuizComplete?: () => void;
   onSelectBook: (book: Book) => void;
   onClose: () => void;
+}
+
+function progressPhrase(percent: number): string {
+  if (percent >= 100) return 'Llegaste al final del libro.';
+  if (percent >= 45 && percent <= 60) return 'Ya llevas aproximadamente la mitad del libro.';
+  if (percent > 0) return `Llevas cerca del ${percent}% del libro.`;
+  return 'Apenas empieza esta lectura. Sigo aquí si me necesitas.';
 }
 
 export const ReedModePanel: React.FC<ReedModePanelProps> = ({
   book,
   allBooks,
   currentParagraph,
+  chapterTitle,
+  progressPercent,
+  chapterCompleted = false,
+  onQuizComplete,
   onSelectBook,
   onClose,
 }) => {
@@ -56,12 +84,14 @@ export const ReedModePanel: React.FC<ReedModePanelProps> = ({
 
   if (mode === 'sleeping') {
     return (
-      <div className="fixed bottom-24 right-4 sm:right-8 z-40 max-w-sm w-full bg-paper-raised border border-line-strong rounded-lg p-5 shadow-2xl animate-slideUp font-sans">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-line-strong" />
+      <div className="fixed z-40 bottom-[6.5rem] right-[max(0.75rem,calc(50vw-36rem))] w-[min(20rem,calc(100vw-2rem))] max-h-[min(20rem,calc(100dvh-9.5rem))] overflow-y-auto bg-paper-raised border border-line-strong rounded-lg p-4 shadow-2xl animate-slideUp font-sans">
+        <div className="flex items-center justify-between mb-3 gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="w-12 h-16 rounded-[4px] overflow-hidden bg-paper-raised border border-line-strong flex items-end justify-center flex-shrink-0">
+              <img src={modePortraits.sleeping} alt="" className="h-[94%] w-auto object-contain" />
+            </span>
             <span className="text-xs font-bold text-ink-muted uppercase tracking-wider">
-              REED ESTÁ DORMIDO
+              Reed está dormido
             </span>
           </div>
           <button onClick={onClose} className="text-ink-muted hover:text-ink">
@@ -79,12 +109,13 @@ export const ReedModePanel: React.FC<ReedModePanelProps> = ({
   }
 
   return (
-    <div className="fixed bottom-24 right-4 sm:right-8 z-40 max-w-md w-[calc(100%-2rem)] sm:w-[440px] bg-paper-raised border border-line-strong rounded-lg shadow-2xl overflow-hidden animate-slideUp font-sans max-h-[80vh] flex flex-col">
-      {/* Cabecera del panel contextual según modo */}
-      <div className="p-3.5 sm:p-4 bg-paper border-b border-line flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="w-1.5 h-4 bg-reed rounded-full" />
-          <span className="text-xs font-bold text-ink uppercase tracking-wider">
+    <div className="fixed z-40 bottom-[6.5rem] right-[max(0.75rem,calc(50vw-36rem))] w-[min(22rem,calc(100vw-2rem))] max-h-[min(26rem,calc(100dvh-9.5rem))] bg-paper-raised border border-line-strong rounded-lg shadow-2xl overflow-hidden animate-slideUp font-sans flex flex-col">
+      <div className="p-3 bg-paper border-b border-line flex items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <span className="w-12 h-16 rounded-[4px] overflow-hidden bg-paper border border-line-strong flex items-end justify-center flex-shrink-0">
+            <img src={modePortraits[mode]} alt="" className="h-[94%] w-auto object-contain" />
+          </span>
+          <span className="min-w-0 text-sm font-bold leading-snug text-ink">
             {mode === 'companion' && 'Modo Compañero · Leyendo contigo'}
             {mode === 'teacher' && 'Modo Profesor · Comprensión y guía'}
             {mode === 'librarian' && 'Modo Bibliotecario · Tu biblioteca'}
@@ -106,6 +137,9 @@ export const ReedModePanel: React.FC<ReedModePanelProps> = ({
         ========================================= */}
         {mode === 'companion' && (
           <div className="space-y-4">
+            {typeof progressPercent === 'number' && (
+              <p className="font-serif text-sm text-ink leading-relaxed">{progressPhrase(progressPercent)}</p>
+            )}
             <div className="flex gap-2 border-b border-line pb-2">
               <button
                 onClick={() => setCompanionTab('curiosity')}
@@ -190,7 +224,7 @@ export const ReedModePanel: React.FC<ReedModePanelProps> = ({
                 <div className="p-4 rounded-md bg-paper border border-line">
                   <span className="block text-[11px] font-bold text-ink-muted uppercase tracking-wider mb-2">
                     {summaryScope === 'paragraph' && 'Resumen del párrafo seleccionado'}
-                    {summaryScope === 'chapter' && `Resumen de ${book.chapters[0]?.title || 'el capítulo'}`}
+                    {summaryScope === 'chapter' && `Resumen de ${chapterTitle || book.chapters[0]?.title || 'el capítulo'}`}
                     {summaryScope === 'session' && `Lo que llevas leído en esta sesión (${formatTime(sessionStats.secondsReading)})`}
                   </span>
                   <p className="font-serif text-sm leading-relaxed text-ink">
@@ -199,7 +233,7 @@ export const ReedModePanel: React.FC<ReedModePanelProps> = ({
                         ? `Se describe: "${currentParagraph.text.slice(0, 140)}..." En resumen, plasma cómo los personajes perciben lo novedoso con asombro.`
                         : 'Toca cualquier párrafo en el libro para ver su síntesis aquí.'
                       : summaryScope === 'chapter'
-                      ? (book.chapters[0]?.whereYouLeftOffSummary || 'Melquíades llega a Macondo trayendo los imanes, desatando la obsesión de José Arcadio por la alquimia y el oro.')
+                      ? ((book.chapters.find((chapter) => chapter.title === chapterTitle) || book.chapters[0])?.whereYouLeftOffSummary || 'Sigo el hilo de este capítulo contigo, sin adelantarme al texto.')
                       : `En esta sesión leíste desde el párrafo ${sessionStats.startParagraphOrder} hasta el ${sessionStats.endParagraphOrder} durante ${formatTime(sessionStats.secondsReading)}. Se ha explorado la fundación de Macondo y la fascinación por los inventos de los gitanos.`}
                   </p>
                 </div>
@@ -216,6 +250,11 @@ export const ReedModePanel: React.FC<ReedModePanelProps> = ({
             {!showSessionTest ? (
               <>
                 {/* 4.3 Guía de lectura personalizada */}
+                {chapterCompleted && (
+                  <p className="font-serif text-sm text-ink leading-relaxed">
+                    Terminaste este capítulo. ¿Quieres comprobar qué recuerdas?
+                  </p>
+                )}
                 <div className="p-3.5 rounded-md bg-paper border border-line flex items-center gap-3">
                   <Clock size={20} className="text-reed flex-shrink-0" />
                   <div>
@@ -318,6 +357,7 @@ export const ReedModePanel: React.FC<ReedModePanelProps> = ({
               <SessionTestFlow
                 sessionStats={sessionStats}
                 book={book}
+                onQuizComplete={onQuizComplete}
                 onDone={() => setShowSessionTest(false)}
               />
             )}
@@ -515,13 +555,22 @@ export const ReedModePanel: React.FC<ReedModePanelProps> = ({
 const SessionTestFlow: React.FC<{
   sessionStats: any;
   book: Book;
+  onQuizComplete?: () => void;
   onDone: () => void;
-}> = ({ sessionStats, book, onDone }) => {
+}> = ({ sessionStats, book, onQuizComplete, onDone }) => {
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [selectedOpt, setSelectedOpt] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
   const [answered, setAnswered] = useState(false);
+  const quizReported = useRef(false);
+
+  useEffect(() => {
+    if (isFinished && !quizReported.current) {
+      quizReported.current = true;
+      onQuizComplete?.();
+    }
+  }, [isFinished, onQuizComplete]);
 
   // Preguntas generadas basadas estrictamente en la sesión
   const sessionQuestions: QuizQuestion[] = [
