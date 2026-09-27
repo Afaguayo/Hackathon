@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getUserId } from "@/lib/auth";
-import { findUserDocument } from "@/lib/documents";
+import { findReadableDocument } from "@/lib/documents";
 import { handleRouteError, jsonError } from "@/lib/http";
 
 const { conversations, messages } = schema;
@@ -11,7 +11,7 @@ const { conversations, messages } = schema;
 export async function GET(_request: Request, ctx: RouteContext<"/api/documents/[id]/conversations">) {
   try {
     const userId = await getUserId();
-    const document = await findUserDocument(userId, (await ctx.params).id);
+    const document = await findReadableDocument(userId, (await ctx.params).id);
     if (!document) return jsonError("Document not found", 404);
 
     const db = getDb();

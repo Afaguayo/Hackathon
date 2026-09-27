@@ -1,14 +1,14 @@
 import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getUserId } from "@/lib/auth";
-import { findUserDocument } from "@/lib/documents";
+import { findReadableDocument, findUserDocument } from "@/lib/documents";
 import { deleteAgent, deleteKnowledgeDoc, ElevenLabsApiError } from "@/lib/elevenlabs";
 import { handleRouteError, jsonError } from "@/lib/http";
 
 // GET -> { document }
 export async function GET(_request: Request, ctx: RouteContext<"/api/documents/[id]">) {
   try {
-    const document = await findUserDocument(await getUserId(), (await ctx.params).id);
+    const document = await findReadableDocument(await getUserId(), (await ctx.params).id);
     if (!document) return jsonError("Document not found", 404);
     return Response.json({ document });
   } catch (err) {
@@ -16,7 +16,7 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/documents/[
   }
 }
 
-// DELETE -> 204. Removes the document's ElevenLabs agent and knowledge-base file too.
+// DELETE -> 204. Owner only (catalog books can't be deleted). Removes the ElevenLabs agent and knowledge-base file too.
 export async function DELETE(_request: Request, ctx: RouteContext<"/api/documents/[id]">) {
   try {
     const document = await findUserDocument(await getUserId(), (await ctx.params).id);

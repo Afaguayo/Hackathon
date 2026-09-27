@@ -5,6 +5,8 @@ import { extractTextItems } from "unpdf";
 // We extract text ourselves because the ElevenLabs knowledge-base extraction drops content from PDFs.
 
 export type Chapter = { number: number; title: string; paragraphs: string[] };
+/** During extraction: title "" = no heading (named "Capítulo N" at the end); part = piece of a split chapter. */
+export type RawChapter = Chapter & { part?: number };
 export type BookContent = { chapters: Chapter[] };
 
 export const SUPPORTED_EXTENSIONS = [".pdf", ".epub", ".txt", ".md", ".html", ".htm"] as const;
@@ -13,16 +15,21 @@ export class UnreadableBookError extends Error {}
 
 // Each paragraph must fit one read-aloud request (MAX_TTS_CHARS = 2500), with room to spare.
 const MAX_PARAGRAPH_CHARS = 1800;
-// Books without headings are cut into sections of this many paragraphs so the reader stays navigable.
+// Books without headings, and chapters longer than MAX_CHAPTER_PARAGRAPHS, are cut into sections of
+// PARAGRAPHS_PER_SECTION paragraphs so the reader stays navigable and a chapter fits one summary.
 const PARAGRAPHS_PER_SECTION = 60;
+const MAX_CHAPTER_PARAGRAPHS = 80;
 
 const HEADING = /^(#{1,3}\s+.+|(cap[ií]tulo|chapter|parte|part|libro|book|pr[oó]logo|prologue|ep[ií]logo|epilogue)\b[^\n]{0,80})$/i;
 
-export async function extractBookContent(file: File): Promise<BookContent> {
+export async function extractBookContent(
+  file: File,
+  options: { clean?: (chapters: RawChapter[]) => RawChapter[] } = {},
+): Promise<BookContent> {
   const name = file.name.toLowerCase();
   const bytes = new Uint8Array(await file.arrayBuffer());
 
-  let chapters: Chapter[];
+  let chapters: RawChapter[];
   if (name.endsWith(".pdf")) chapters = await fromPdf(bytes);
   else if (name.endsWith(".epub")) chapters = await fromEpub(bytes);
   else if (name.endsWith(".html") || name.endsWith(".htm")) chapters = fromHtmlDocuments([new TextDecoder().decode(bytes)]);
@@ -31,10 +38,20 @@ export async function extractBookContent(file: File): Promise<BookContent> {
   chapters = chapters
     .map((c) => ({ ...c, paragraphs: c.paragraphs.flatMap(splitLongParagraph).filter(Boolean) }))
     .filter((c) => c.paragraphs.length > 0);
+  if (options.clean) chapters = options.clean(chapters).filter((c) => c.paragraphs.length > 0);
+  chapters = chapters.flatMap(splitLongChapter);
   if (!chapters.length) {
     throw new UnreadableBookError("No readable text found in this file (a scanned PDF has no text layer).");
   }
-  return { chapters: chapters.map((c, i) => ({ ...c, number: i + 1 })) };
+  // Name untitled chapters last, so the numbers match what the reader sees after cleanup/splitting.
+  let section = 0;
+  return {
+    chapters: chapters.map((c, i) => {
+      if (!c.part || c.part === 1) section = i + 1;
+      const title = c.title || `Capítulo ${section}${c.part ? ` · parte ${c.part}` : ""}`;
+      return { number: i + 1, title, paragraphs: c.paragraphs };
+    }),
+  };
 }
 
 /** Plain text of the whole book, used as the ElevenLabs knowledge-base document. */
@@ -145,12 +162,12 @@ async function fromEpub(bytes: Uint8Array): Promise<Chapter[]> {
 }
 
 /** One chapter per document (EPUB spine item), split further at <h1>/<h2>. */
-function fromHtmlDocuments(docs: string[]): Chapter[] {
-  const chapters: Chapter[] = [];
+function fromHtmlDocuments(docs: string[]): RawChapter[] {
+  const chapters: RawChapter[] = [];
   for (const doc of docs) {
     const body = (doc.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] ?? doc)
       .replace(/<(script|style|nav)[\s\S]*?<\/\1>/gi, "");
-    let current: Chapter | undefined;
+    let current: RawChapter | undefined;
     for (const m of body.matchAll(/<(h[1-3]|p|li|blockquote)\b[^>]*>([\s\S]*?)<\/\1>/gi)) {
       const text = htmlToText(m[2]);
       if (!text) continue;
@@ -159,7 +176,7 @@ function fromHtmlDocuments(docs: string[]): Chapter[] {
         chapters.push(current);
       } else {
         if (!current) {
-          current = { number: 0, title: `Capítulo ${chapters.length + 1}`, paragraphs: [] };
+          current = { number: 0, title: "", paragraphs: [] };
           chapters.push(current);
         }
         current.paragraphs.push(text);
@@ -184,7 +201,7 @@ function fromPlainText(text: string): Chapter[] {
       chapters.push(current);
     } else {
       if (!current) {
-        current = { number: 0, title: "Capítulo 1", paragraphs: [] };
+        current = { number: 0, title: "", paragraphs: [] };
         chapters.push(current);
       }
       current.paragraphs.push(block);
@@ -203,6 +220,17 @@ function fromPlainText(text: string): Chapter[] {
 }
 
 // ---------- helpers ----------
+
+function splitLongChapter(chapter: RawChapter): RawChapter[] {
+  if (chapter.paragraphs.length <= MAX_CHAPTER_PARAGRAPHS) return [chapter];
+  const parts = Math.ceil(chapter.paragraphs.length / PARAGRAPHS_PER_SECTION);
+  return Array.from({ length: parts }, (_, i) => ({
+    number: 0,
+    part: i + 1,
+    title: chapter.title ? `${chapter.title} · parte ${i + 1}` : "",
+    paragraphs: chapter.paragraphs.slice(i * PARAGRAPHS_PER_SECTION, (i + 1) * PARAGRAPHS_PER_SECTION),
+  }));
+}
 
 function splitLongParagraph(paragraph: string): string[] {
   if (paragraph.length <= MAX_PARAGRAPH_CHARS) return [paragraph];

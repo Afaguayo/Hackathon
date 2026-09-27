@@ -1,11 +1,11 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getUserId } from "@/lib/auth";
 import { handleRouteError, isUuid, jsonError } from "@/lib/http";
 
 const { documents } = schema;
 
-// GET -> { content: { chapters: [{ number, title, paragraphs: string[] }] } } for the reader.
+// GET -> { content: { chapters: [{ number, title, paragraphs: string[] }] } } for the reader (own or catalog books).
 export async function GET(_request: Request, ctx: RouteContext<"/api/documents/[id]/content">) {
   const { id } = await ctx.params;
   if (!isUuid(id)) return jsonError("Document not found", 404);
@@ -13,7 +13,7 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/documents/[
     const [row] = await getDb()
       .select({ content: documents.content })
       .from(documents)
-      .where(and(eq(documents.id, id), eq(documents.userId, await getUserId())));
+      .where(and(eq(documents.id, id), or(eq(documents.userId, await getUserId()), eq(documents.isPublic, true))));
     if (!row) return jsonError("Document not found", 404);
     if (!row.content) return jsonError("This document has no readable text (uploaded before text extraction)", 409);
     return Response.json({ content: row.content });

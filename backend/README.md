@@ -45,6 +45,8 @@ Server side of the AI Reading Companion: Next.js route handlers on Vercel, Neon 
 - [x] Text extraction (PDF/EPUB/TXT/MD/HTML) + `GET /api/documents/:id/content`
 - [x] Reed AI for the frontend: `/api/ai/explain`, `/api/ai/summarize`, `/api/ai/quiz` (ElevenLabs text-only agent)
 - [x] Frontend (Gael's Vite app) served at `/` from the same deployment
+- [x] Demo catalog: 5 public-domain books readable by every user (`is_public`), seeded by `npm run db:seed-catalog`
+- [x] Book agents wait for ElevenLabs' search index (`ensureRagIndex`, multilingual embeddings) before creation; uploads take ~10 s
 
 ## Hooking up ElevenLabs
 

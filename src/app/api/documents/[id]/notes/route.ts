@@ -1,7 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getUserId } from "@/lib/auth";
-import { findUserDocument } from "@/lib/documents";
+import { findReadableDocument } from "@/lib/documents";
 import { handleRouteError, jsonError } from "@/lib/http";
 
 const { notes } = schema;
@@ -12,7 +12,7 @@ type NoteType = (typeof NOTE_TYPES)[number];
 export async function GET(_request: Request, ctx: RouteContext<"/api/documents/[id]/notes">) {
   try {
     const userId = await getUserId();
-    const document = await findUserDocument(userId, (await ctx.params).id);
+    const document = await findReadableDocument(userId, (await ctx.params).id);
     if (!document) return jsonError("Document not found", 404);
 
     const rows = await getDb()
@@ -38,7 +38,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/documents/[
 
   try {
     const userId = await getUserId();
-    const document = await findUserDocument(userId, (await ctx.params).id);
+    const document = await findReadableDocument(userId, (await ctx.params).id);
     if (!document) return jsonError("Document not found", 404);
 
     const [note] = await getDb().insert(notes).values({ userId, documentId: document.id, type, text, quote }).returning();

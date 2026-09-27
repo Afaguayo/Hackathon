@@ -135,6 +135,9 @@ type ApiDocument = {
   chapterCount: number;
   paragraphCount: number;
   createdAt: string;
+  /** Catalog book: shared public-domain demo book every user can read (not deletable). */
+  isPublic: boolean;
+  description: string | null;
   progress?: { position: number; percent: number } | null;
 };
 
@@ -152,10 +155,13 @@ function toBook(doc: ApiDocument): Book {
     totalParagraphs: doc.paragraphCount,
     progressPosition: position,
     progressPercent: percent,
-    whereYouLeftOff: doc.progress ? `Vas en el ${percent}% del libro.` : 'Aún no empiezas este libro.',
+    whereYouLeftOff: doc.progress
+      ? `Vas en el ${percent}% del libro.`
+      : doc.description || 'Aún no empiezas este libro.',
     hasAudio: true,
     addedAt: doc.createdAt.slice(0, 10),
-    tags: ['Mi biblioteca'],
+    tags: doc.isPublic ? ['Biblioteca Reed', 'Dominio público'] : ['Mi biblioteca'],
+    recommendationReason: doc.description || undefined,
     chapters: [],
   };
 }
