@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getUserId } from "@/lib/auth";
-import { findUserDocument } from "@/lib/documents";
+import { findReadableDocument } from "@/lib/documents";
 import { handleRouteError, jsonError } from "@/lib/http";
 
 const { readingProgress } = schema;
@@ -10,7 +10,7 @@ const { readingProgress } = schema;
 export async function GET(_request: Request, ctx: RouteContext<"/api/documents/[id]/progress">) {
   try {
     const userId = await getUserId();
-    const document = await findUserDocument(userId, (await ctx.params).id);
+    const document = await findReadableDocument(userId, (await ctx.params).id);
     if (!document) return jsonError("Document not found", 404);
 
     const [progress] = await getDb()
@@ -35,7 +35,7 @@ export async function PUT(request: Request, ctx: RouteContext<"/api/documents/[i
 
   try {
     const userId = await getUserId();
-    const document = await findUserDocument(userId, (await ctx.params).id);
+    const document = await findReadableDocument(userId, (await ctx.params).id);
     if (!document) return jsonError("Document not found", 404);
 
     const values = { position, percent, lastReadAt: new Date() };

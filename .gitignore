@@ -34,3 +34,9 @@ npm-debug.log*
 
 # Clerk keyless-mode keys (local dev)
 .clerk/
+
+# Frontend (Vite) build output served by Next, and Vite's dependency cache
+/public/app/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/

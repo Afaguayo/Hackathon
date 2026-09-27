@@ -4,6 +4,9 @@ import { Button } from '../ui/Button';
 import { X, Upload, AlertCircle } from 'lucide-react';
 import { extractPdfChapters, isPdfFile, withTimeout } from '../../lib/pdf';
 import { buildUploadedBook, chaptersFromPlainText } from '../../lib/reading';
+import { ApiError, isBackendSession, uploadBook } from '../../services/api';
+
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 interface UploadBookModalProps {
   isOpen: boolean;
@@ -30,7 +33,7 @@ export const UploadBookModal: React.FC<UploadBookModalProps> = ({
     const selected = event.target.files?.[0];
     if (!selected) return;
     const name = selected.name.toLowerCase();
-    const allowed = name.endsWith('.pdf') || name.endsWith('.txt') || name.endsWith('.md');
+    const allowed = name.endsWith('.pdf') || name.endsWith('.txt') || name.endsWith('.md') || (isBackendSession() && name.endsWith('.epub'));
     if (!allowed) {
       setError('Puedo preparar PDF o texto. Prueba con uno de esos archivos.');
       setFile(null);
@@ -56,6 +59,34 @@ export const UploadBookModal: React.FC<UploadBookModalProps> = ({
 
     setError(null);
     setPhase('uploading');
+
+    if (isBackendSession()) {
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setError('El archivo pesa más de 4 MB. Prueba con un archivo más liviano.');
+        setPhase('idle');
+        return;
+      }
+      try {
+        const book = await uploadBook(file, title.trim(), author.trim());
+        setPhase('ready');
+        onBookUploaded(book);
+        setPhase('idle');
+        setFile(null);
+        setTitle('');
+        setAuthor('');
+        onClose();
+      } catch (caught) {
+        const status = caught instanceof ApiError ? caught.status : 0;
+        setError(
+          status === 422 ? 'No pude leer el texto de este archivo. Si es un PDF escaneado, prueba con un EPUB.'
+          : status === 429 ? 'Llegaste al límite de libros por hoy. Vuelve mañana.'
+          : status === 413 ? 'El archivo pesa más de 4 MB.'
+          : 'No pude subir el libro. Inténtalo de nuevo.',
+        );
+        setPhase('idle');
+      }
+      return;
+    }
 
     try {
       const name = file.name.toLowerCase();
@@ -160,8 +191,8 @@ export const UploadBookModal: React.FC<UploadBookModalProps> = ({
             <span className="block text-xs font-bold text-ink uppercase tracking-wider mb-1.5">Archivo</span>
             <span className="border-2 border-dashed border-line-strong rounded-md p-6 flex flex-col items-center justify-center cursor-pointer hover:bg-paper-sunk transition-colors text-center">
               <Upload size={28} strokeWidth={1.75} className="text-reed mb-2" />
-              <span className="text-sm text-ink">{file ? file.name : 'PDF, TXT o Markdown'}</span>
-              <input type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" className="hidden" onChange={handleFileChange} />
+              <span className="text-sm text-ink">{file ? file.name : 'PDF, TXT, Markdown o EPUB'}</span>
+              <input type="file" accept=".pdf,.txt,.md,.epub,application/pdf,text/plain" className="hidden" onChange={handleFileChange} />
             </span>
           </label>
 
