@@ -8,6 +8,7 @@ import { ReedBubble } from '../reed/ReedBubble';
 import { ReedModePanel } from '../reed/ReedModePanel';
 import { chapterStarts, pageIndexForPosition, paginateBook, progressForPage } from '../../lib/reading';
 import { ChevronLeft, ChevronRight, List, Minus, Plus } from 'lucide-react';
+import { isBackendSession, synthesizeSpeech } from '../../services/api';
 
 interface ReaderViewProps {
   book: Book;
@@ -69,6 +70,39 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   pagesRef.current = pages;
   playingRef.current = isPlaying;
   rateRef.current = playbackRate;
+
+  // Voz de ElevenLabs (con sesión): un audio por párrafo, con el siguiente precargado. Si se acaba el
+  // límite diario o falla la reproducción, se usa la voz del navegador.
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCacheRef = useRef<Map<string, Promise<string>>>(new Map());
+  const useBrowserVoiceRef = useRef(false);
+  const speechRunRef = useRef(0); // cada lectura nueva invalida la anterior
+
+  const stopSpeech = () => {
+    speechRunRef.current++;
+    audioRef.current?.pause();
+    audioRef.current = null;
+    window.speechSynthesis?.cancel();
+  };
+
+  const getParagraphAudio = (paragraph: Paragraph) => {
+    let url = audioCacheRef.current.get(paragraph.id);
+    if (!url) {
+      url = synthesizeSpeech(paragraph.text);
+      url.catch(() => audioCacheRef.current.delete(paragraph.id));
+      audioCacheRef.current.set(paragraph.id, url);
+    }
+    return url;
+  };
+
+  useEffect(() => {
+    const cache = audioCacheRef.current;
+    return () => {
+      stopSpeech();
+      cache.forEach((p) => p.then(URL.revokeObjectURL).catch(() => {}));
+      cache.clear();
+    };
+  }, []);
   onProgressRef.current = onProgress;
   addSecondsRef.current = addReadingSeconds;
 
@@ -78,7 +112,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     setSelectedParagraph(null);
     setActiveReadingIndex(-1);
     setIsPlaying(false);
-    window.speechSynthesis?.cancel();
+    stopSpeech();
   }, [book.id]);
 
   useEffect(() => {
@@ -107,7 +141,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
   useEffect(() => {
     if (mode !== 'reader' && isPlaying) {
-      window.speechSynthesis?.pause();
+      stopSpeech();
       setIsPlaying(false);
     }
   }, [mode]);
@@ -143,7 +177,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
   }, []);
 
   const goToPage = (index: number) => {
-    window.speechSynthesis?.cancel();
+    stopSpeech();
     setIsPlaying(false);
     setActiveReadingIndex(-1);
     const next = Math.min(pages.length - 1, Math.max(0, index));
@@ -170,11 +204,11 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [pages.length]);
 
-  const speakParagraph = (index: number) => {
-    if (!('speechSynthesis' in window)) return;
+  const speakParagraph = async (index: number) => {
     const current = pagesRef.current[pageIndexRef.current];
     if (!current) return;
-    window.speechSynthesis.cancel();
+    stopSpeech();
+    const run = speechRunRef.current;
     if (index >= current.paragraphs.length) {
       const nextPage = pageIndexRef.current + 1;
       if (nextPage < pagesRef.current.length) {
@@ -190,18 +224,48 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
 
     const paragraph = current.paragraphs[index];
     recordParagraphRead(paragraph.order);
+    setActiveReadingIndex(index);
+    const next = () => {
+      if (run === speechRunRef.current) speakParagraph(index + 1);
+    };
+
+    // 1) Voz de ElevenLabs
+    if (isBackendSession() && !useBrowserVoiceRef.current) {
+      try {
+        const url = await getParagraphAudio(paragraph);
+        if (run !== speechRunRef.current) return;
+        const audio = new Audio(url);
+        audio.playbackRate = rateRef.current;
+        audio.onended = next;
+        audioRef.current = audio;
+        await audio.play();
+        const following = current.paragraphs[index + 1];
+        if (following) getParagraphAudio(following).catch(() => {});
+        return;
+      } catch {
+        if (run !== speechRunRef.current) return;
+        useBrowserVoiceRef.current = true;
+      }
+    }
+
+    // 2) Voz del navegador
+    if (!('speechSynthesis' in window)) {
+      setIsPlaying(false);
+      return;
+    }
     const utterance = new SpeechSynthesisUtterance(paragraph.text);
     utterance.lang = 'es-ES';
     utterance.rate = rateRef.current;
-    utterance.onend = () => speakParagraph(index + 1);
-    utterance.onerror = () => setIsPlaying(false);
-    setActiveReadingIndex(index);
+    utterance.onend = next;
+    utterance.onerror = () => {
+      if (run === speechRunRef.current) setIsPlaying(false);
+    };
     window.speechSynthesis.speak(utterance);
   };
 
   const handleTogglePlay = () => {
     if (isPlaying) {
-      window.speechSynthesis?.pause();
+      stopSpeech();
       setIsPlaying(false);
       return;
     }
@@ -416,7 +480,8 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
             const next = rates[(rates.indexOf(playbackRate) + 1) % rates.length];
             setPlaybackRate(next);
             rateRef.current = next;
-            if (isPlaying) speakParagraph(activeReadingIndex >= 0 ? activeReadingIndex : 0);
+            if (audioRef.current) audioRef.current.playbackRate = next;
+            else if (isPlaying) speakParagraph(activeReadingIndex >= 0 ? activeReadingIndex : 0);
           }}
           onPrevParagraph={() => {
             const index = Math.max(0, activeReadingIndex - 1);
@@ -432,7 +497,7 @@ export const ReaderView: React.FC<ReaderViewProps> = ({
           onMenuOpenChange={showReedMenu}
           onOpenReedAction={() => showReedPanel(true)}
           onClose={() => {
-            window.speechSynthesis?.cancel();
+            stopSpeech();
             setIsPlaying(false);
             setMode('companion');
           }}
