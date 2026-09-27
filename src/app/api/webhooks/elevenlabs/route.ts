@@ -46,6 +46,8 @@ export async function POST(request: Request) {
     // Only per-document agents map to a user; the general companion's sessions aren't stored.
     const document = await findDocumentByAgentId(agent_id);
     if (!document) return Response.json({ ignored: "agent is not linked to a document" });
+    // A catalog book's agent is shared by every user, and the webhook doesn't say who talked to it.
+    if (document.isPublic) return Response.json({ ignored: "catalog book (shared agent)" });
 
     const db = getDb();
     // ElevenLabs retries failed deliveries; a conversation is stored once.

@@ -28,6 +28,10 @@ export async function POST(request: Request) {
   try {
     const document = await findDocumentByAgentId(agentId);
     if (!document) return jsonError("This agent is not linked to a document", 404);
+    // Catalog agents are shared by all users and the tool call doesn't identify the reader.
+    if (document.isPublic) {
+      return Response.json({ result: "En los libros de ejemplo no puedo guardar notas por voz; puedes guardarlas desde la pantalla." });
+    }
 
     await getDb()
       .insert(schema.notes)

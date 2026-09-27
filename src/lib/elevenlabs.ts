@@ -79,13 +79,36 @@ type AgentConfig = {
       prompt: {
         prompt: string;
         knowledge_base?: { type: string; name: string; id: string; usage_mode: string }[];
-        rag?: { enabled: boolean };
+        rag?: { enabled: boolean; embedding_model?: string } & Record<string, unknown>;
         tool_ids?: string[];
         tools?: unknown[];
       };
     } & Record<string, unknown>;
   } & Record<string, unknown>;
 };
+
+// Multilingual embeddings: the books are mostly Spanish.
+const RAG_EMBEDDING_MODEL = "multilingual_e5_large_instruct";
+
+/**
+ * Requests the document's search (RAG) index for `model` and waits until it is built. ElevenLabs
+ * indexes short texts right away but longer books only on request, and an agent can't be created
+ * with RAG on until its document's index is ready (422 rag_index_not_ready). ~10-20 s for a book.
+ */
+async function ensureRagIndex(knowledgeBaseId: string, model: string): Promise<void> {
+  const deadline = Date.now() + 100_000;
+  for (;;) {
+    const res = await elevenlabs(`/convai/knowledge-base/${encodeURIComponent(knowledgeBaseId)}/rag-index`, {
+      method: "POST",
+      body: JSON.stringify({ model }),
+    });
+    const { status } = (await res.json()) as { status: string };
+    if (status === "succeeded") return;
+    if (status === "failed") throw new ElevenLabsApiError(502, `ElevenLabs could not index the document (${model})`);
+    if (Date.now() > deadline) throw new ElevenLabsApiError(504, "ElevenLabs took too long to index the document");
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+}
 
 const KNOWLEDGE_BASE_INSTRUCTIONS = `
 
@@ -106,16 +129,26 @@ export async function createDocumentAgent(knowledgeBaseId: string, title: string
   if (config.agent.prompt.tool_ids?.length) delete config.agent.prompt.tools;
   config.agent.prompt.prompt += KNOWLEDGE_BASE_INSTRUCTIONS;
   config.agent.prompt.knowledge_base = [{ type: "text", name: title, id: knowledgeBaseId, usage_mode: "auto" }];
-  config.agent.prompt.rag = { enabled: true };
+  config.agent.prompt.rag = { ...config.agent.prompt.rag, enabled: true, embedding_model: RAG_EMBEDDING_MODEL };
+  await ensureRagIndex(knowledgeBaseId, RAG_EMBEDDING_MODEL);
 
-  const res = await elevenlabs("/convai/agents/create", {
-    method: "POST",
-    body: JSON.stringify({
-      name: `Reader: ${title}`.slice(0, 100),
-      conversation_config: config,
-      platform_settings: { auth: { enable_auth: true } },
-    }),
+  const body = JSON.stringify({
+    name: `Reader: ${title}`.slice(0, 100),
+    conversation_config: config,
+    platform_settings: { auth: { enable_auth: true } },
   });
+  // Safety net: the index can take a moment to be visible to agent creation after it reports success.
+  let res: Response | undefined;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      res = await elevenlabs("/convai/agents/create", { method: "POST", body });
+      break;
+    } catch (err) {
+      const indexing = err instanceof ElevenLabsApiError && err.status === 422 && err.message.includes("rag_index_not_ready");
+      if (!indexing || attempt >= 6) throw err;
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+  }
   const data = (await res.json()) as { agent_id: string };
   return data.agent_id;
 }

@@ -48,6 +48,20 @@ Errors come back as `{ "error": "..." }` (400 bad input, 401 signed out, 404 not
 
 Live voice conversation isn't in the frontend yet. To add it: `@elevenlabs/react` (wrap in `<ConversationProvider>`, then `useConversation().startSession({ signedUrl, dynamicVariables: { passage, book_title } })` with the URL from `/api/documents/:id/signed-url`).
 
+## Demo catalog (books every user gets)
+
+Five public-domain educational books in Spanish are in the database as **catalog books**: every signed-in user sees them in their library, can read, listen, ask Reed, get summaries and quizzes, and keeps their own progress and notes. Nobody can delete them.
+
+| Book | Author | Shows off |
+|---|---|---|
+| *Reglas y consejos sobre investigación científica* | Santiago Ramón y Cajal | Learning how scientists think |
+| *La Montaña* | Élisée Reclus | Earth science explained |
+| *El Mar* | Jules Michelet | Natural history of the ocean |
+| *El Hombre Mediocre* | José Ingenieros | Psychology/ethics; debating with Reed |
+| *Ariel* | José Enrique Rodó | Education and culture essay |
+
+Source: Project Gutenberg EPUBs (public domain); the seed strips Gutenberg's header, license pages and trademark mentions. To add or restore books, edit `CATALOG` in `scripts/seed-catalog.mts` and run `npm run db:seed-catalog` (safe to re-run; `-- --dry-run` previews). Catalog books are rows with `is_public = true`, owned by `catalog`.
+
 ## Where the code lives and who owns it
 
 | Area | Files | Owner |

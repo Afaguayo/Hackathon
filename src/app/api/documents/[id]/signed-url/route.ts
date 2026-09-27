@@ -1,5 +1,5 @@
 import { getUserId } from "@/lib/auth";
-import { findUserDocument } from "@/lib/documents";
+import { findReadableDocument } from "@/lib/documents";
 import { getAgentSignedUrl } from "@/lib/elevenlabs";
 import { handleRouteError, jsonError } from "@/lib/http";
 import { consumeUsage } from "@/lib/usage";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export async function GET(_request: Request, ctx: RouteContext<"/api/documents/[id]/signed-url">) {
   try {
     const userId = await getUserId();
-    const document = await findUserDocument(userId, (await ctx.params).id);
+    const document = await findReadableDocument(userId, (await ctx.params).id);
     if (!document) return jsonError("Document not found", 404);
     if (document.status !== "ready" || !document.elevenlabsAgentId) {
       return jsonError(`Document is not ready (status: ${document.status})`, 409);

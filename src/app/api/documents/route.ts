@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, or } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { getUserId } from "@/lib/auth";
 import { contentToText, countParagraphs, extractBookContent, SUPPORTED_EXTENSIONS, UnreadableBookError } from "@/lib/book-text";
@@ -9,10 +9,14 @@ import { consumeUsage } from "@/lib/usage";
 
 const { documents, readingProgress } = schema;
 
+// Uploads wait for ElevenLabs to index the book's text before creating its agent (can take ~1 min).
+export const maxDuration = 120;
+
 // Vercel functions reject request bodies over 4.5 MB, so uploads through this route stay under that.
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 
-// GET -> the current user's documents (without their text), newest first, each with its reading progress.
+// GET -> the user's documents, then the catalog (public demo) books, without their text, each with
+// this user's reading progress.
 export async function GET() {
   try {
     const userId = await getUserId();
@@ -20,8 +24,8 @@ export async function GET() {
       .select({ ...documentSummaryColumns, progress: readingProgress })
       .from(documents)
       .leftJoin(readingProgress, and(eq(readingProgress.documentId, documents.id), eq(readingProgress.userId, userId)))
-      .where(eq(documents.userId, userId))
-      .orderBy(desc(documents.createdAt));
+      .where(or(eq(documents.userId, userId), eq(documents.isPublic, true)))
+      .orderBy(documents.isPublic, desc(documents.createdAt));
     return Response.json({ documents: rows });
   } catch (err) {
     return handleRouteError(err, "Could not list documents");
